@@ -1,8 +1,8 @@
-name: untitled-dl-for-now 
+name: amadeus-ex-machina
 channels:
   - defaults
 dependencies:
-  - python==3.11
+  - python==3.12
   - numpy
   - pyyaml
   - matplotlib
