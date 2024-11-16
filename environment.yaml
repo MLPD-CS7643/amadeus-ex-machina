@@ -1,0 +1,13 @@
+name: amadeus-ex-machina
+channels:
+  - defaults
+dependencies:
+  - python==3.12
+  - numpy
+  - pyyaml
+  - matplotlib
+  - jupyter
+  - pytest
+  - pytorch
+  - torchvision
+  - black
