@@ -2,7 +2,7 @@ name: amadeus-ex-machina
 channels:
   - defaults
 dependencies:
-  - python==3.12
+  - python==3.11
   - numpy
   - pyyaml
   - matplotlib
@@ -12,3 +12,6 @@ dependencies:
   - torchvision
   - black
   - pandas
+  - pip
+  - pip:
+      - jams
