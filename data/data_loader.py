@@ -10,14 +10,14 @@ PROCESSED_DATA_DIR = str(Path(__file__).parent / "processed")
 
 
 def _load_chroma_csv(fpath: str) -> pd.DataFrame:
-    data = pd.read_csv(fpath, header=None).iloc[:, 1:]
+    data = pd.read_csv(fpath, header=None, dtype="float32", usecols=range(1, 26))
     headers = ["timestamp"] + [f"pitch_class_{i + 1}" for i in range(data.shape[1] - 1)]
     data.columns = headers
     return data
 
 
 def _get_song_metadata(fpath: str) -> dict:
-    data = pd.read_csv(fpath)
+    data = pd.read_csv(fpath, usecols=["id", "artist", "title", "actual_rank"])
     # Retrieve only valid records
     valid_data = data[data["actual_rank"].notna()]
     song_metadata = {
@@ -84,24 +84,21 @@ def process_billboard_data():
 
 if __name__ == "__main__":
     # Leaving this here for testing purposes
-    lab_path = str(
-        Path(__file__).parent
-        / "raw"
-        / "mapped_data"
-        / "0003"
-        / "annotations"
-        / "majmin.lab"
-    )
-    chroma_path = str(
-        Path(__file__).parent
-        / "raw"
-        / "mapped_data"
-        / "0003"
-        / "metadata"
-        / "bothchroma.csv"
-    )
-    billboard_path = str(Path(__file__).parent / "raw" / "billboard_index.csv")
-    # _get_song_metadata(billboard_path)
+    # lab_path = str(
+    #     Path(__file__).parent
+    #     / "raw"
+    #     / "mapped_data"
+    #     / "0003"
+    #     / "annotations"
+    #     / "majmin.lab"
+    # )
+    # chroma_path = str(
+    #     Path(__file__).parent
+    #     / "raw"
+    #     / "mapped_data"
+    #     / "0003"
+    #     / "metadata"
+    #     / "bothchroma.csv"
+    # )
+    # billboard_path = str(Path(__file__).parent / "raw" / "billboard_index.csv")
     process_billboard_data()
-    # jams_out_path = str(Path(__file__).parent / "jams_out.jams")
-    # build_jams_file(lab_path, chroma_path, jams_out_path)
