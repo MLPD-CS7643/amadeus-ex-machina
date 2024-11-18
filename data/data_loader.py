@@ -73,7 +73,7 @@ def process_billboard_data():
     """Driver for creating all jam files from the raw billboard lab + csv files"""
     song_metadata = _get_song_metadata(BILLBOARD_INDEX_CSV_FPATH)
     for subdir in os.listdir(MAPPED_DATA_DIR):
-        subdir_id = str(int(subdir))  # Removing leading zeroes
+        subdir_id = int(subdir)  # Removing leading zeroes
         _build_jams_file(
             lab_path=f"{MAPPED_DATA_DIR}/{subdir}/annotations/majmin.lab",
             chroma_csv_fpath=f"{MAPPED_DATA_DIR}/{subdir}/metadata/bothchroma.csv",
