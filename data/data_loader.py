@@ -80,7 +80,7 @@ def process_billboard_data():
     for subdir in os.listdir(MAPPED_DATA_DIR):
         subdir_id = int(subdir)  # Removing leading zeroes
         _build_jams_file(
-            lab_path=f"{MAPPED_DATA_DIR}/{subdir}/annotations/majmin.lab",
+            lab_path=f"{MAPPED_DATA_DIR}/{subdir}/annotations/full.lab",
             chroma_csv_fpath=f"{MAPPED_DATA_DIR}/{subdir}/metadata/bothchroma.csv",
             jams_out_path=f"{PROCESSED_DATA_DIR}/{subdir}.jams",
             metadata=song_metadata.get(subdir_id),
@@ -153,8 +153,7 @@ if __name__ == "__main__":
 
     group.add_argument(
         "--process-billboard",
-        metavar="BILLBOARD_PATH",
-        type=str,
+        action="store_true",
         help="Process billboard data to generate ALL jams files",
     )
 
