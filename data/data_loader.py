@@ -1,8 +1,13 @@
 import os
-
 from pathlib import Path
+import argparse
+
 import pandas as pd
 import jams
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder, OneHotEncoder
+from sklearn.model_selection import train_test_split
+
 
 BILLBOARD_INDEX_CSV_FPATH = str(Path(__file__).parent / "raw" / "billboard_index.csv")
 MAPPED_DATA_DIR = str(Path(__file__).parent / "raw" / "mapped_data")
@@ -78,27 +83,80 @@ def process_billboard_data():
             lab_path=f"{MAPPED_DATA_DIR}/{subdir}/annotations/majmin.lab",
             chroma_csv_fpath=f"{MAPPED_DATA_DIR}/{subdir}/metadata/bothchroma.csv",
             jams_out_path=f"{PROCESSED_DATA_DIR}/{subdir}.jams",
-            metadata=song_metadata.get(subdir_id)
+            metadata=song_metadata.get(subdir_id),
         )
 
 
+def prepare_model_data(jams_path: str, save_files: bool = False):
+    """Reads the previously generated jams file and creates the train/test split data. Optionally saves CSVs"""
+    jam = jams.load(jams_path)
+
+    vector_data = [(observation.time, observation.value) for observation in jam.search(namespace="vector")[0]["data"]]
+    timestamps, features = zip(*vector_data)
+    features = np.array(features)
+
+    chord_data = [(annotation.time, annotation.value) for annotation in jam.search(namespace="chord")[0]["data"]]
+
+    labels = []
+    chord_index = 0
+    for time in timestamps:
+        while (
+            chord_index < len(chord_data) - 1 and chord_data[chord_index + 1][0] <= time
+        ):
+            chord_index += 1
+        labels.append(chord_data[chord_index][1])
+
+    scaler = MinMaxScaler()
+    features_scaled = scaler.fit_transform(features)
+
+    label_encoder = LabelEncoder()
+    labels_encoded = label_encoder.fit_transform(labels)
+    X_train, X_test, y_train, y_test = train_test_split(features_scaled, labels_encoded, test_size=0.2, random_state=42)
+
+    if save_files:
+        jams_id = jams_path.split(".")[0]
+        output_path = Path(PROCESSED_DATA_DIR) / jams_id
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        pd.DataFrame(X_train).to_csv(output_path / "X_train.csv", index=False, header=False)
+        pd.DataFrame(X_test).to_csv(output_path / "X_test.csv", index=False, header=False)
+        pd.DataFrame(y_train).to_csv(output_path / "y_train.csv", index=False, header=False)
+        pd.DataFrame(y_test).to_csv(output_path / "y_test.csv", index=False, header=False)
+        print(f"Train and test data saved to directory: {output_path}")
+
+    return X_train, X_test, y_train, y_test
+
+
 if __name__ == "__main__":
-    # Leaving this here for testing purposes
-    # lab_path = str(
-    #     Path(__file__).parent
-    #     / "raw"
-    #     / "mapped_data"
-    #     / "0003"
-    #     / "annotations"
-    #     / "majmin.lab"
-    # )
-    # chroma_path = str(
-    #     Path(__file__).parent
-    #     / "raw"
-    #     / "mapped_data"
-    #     / "0003"
-    #     / "metadata"
-    #     / "bothchroma.csv"
-    # )
-    # billboard_path = str(Path(__file__).parent / "raw" / "billboard_index.csv")
-    process_billboard_data()
+    parser = argparse.ArgumentParser(
+        description="Utilities for prepping model data.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    group = parser.add_mutually_exclusive_group(required=True)
+
+    group.add_argument(
+        "--process-billboard",
+        metavar="BILLBOARD_PATH",
+        type=str,
+        help="Process billboard data to generate ALL jams files"
+    )
+
+    group.add_argument(
+        "--prepare-model-data",
+        metavar="JAMS_PATH",
+        type=str,
+        help="Prepare model data from specified jams file"
+    )
+    parser.add_argument(
+        "-s",
+        "--save",
+        action="store_true",
+        help="Save files when using --prepare-model (ignored for other operations)"
+    )
+
+    args = parser.parse_args()
+    if args.process_billboard:
+        process_billboard_data()
+    elif args.prepare_model_data:
+        prepare_model_data(args.prepare_model_data, args.save)
