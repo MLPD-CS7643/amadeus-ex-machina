@@ -91,11 +91,17 @@ def prepare_model_data(jams_path: str, save_files: bool = False):
     """Reads the previously generated jams file and creates the train/test split data. Optionally saves CSVs"""
     jam = jams.load(jams_path)
 
-    vector_data = [(observation.time, observation.value) for observation in jam.search(namespace="vector")[0]["data"]]
+    vector_data = [
+        (observation.time, observation.value)
+        for observation in jam.search(namespace="vector")[0]["data"]
+    ]
     timestamps, features = zip(*vector_data)
     features = np.array(features)
 
-    chord_data = [(annotation.time, annotation.value) for annotation in jam.search(namespace="chord")[0]["data"]]
+    chord_data = [
+        (annotation.time, annotation.value)
+        for annotation in jam.search(namespace="chord")[0]["data"]
+    ]
 
     labels = []
     chord_index = 0
@@ -111,17 +117,27 @@ def prepare_model_data(jams_path: str, save_files: bool = False):
 
     label_encoder = LabelEncoder()
     labels_encoded = label_encoder.fit_transform(labels)
-    X_train, X_test, y_train, y_test = train_test_split(features_scaled, labels_encoded, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        features_scaled, labels_encoded, test_size=0.2, random_state=42
+    )
 
     if save_files:
         jams_id = jams_path.split(".")[0]
         output_path = Path(PROCESSED_DATA_DIR) / jams_id
         output_path.mkdir(parents=True, exist_ok=True)
 
-        pd.DataFrame(X_train).to_csv(output_path / "X_train.csv", index=False, header=False)
-        pd.DataFrame(X_test).to_csv(output_path / "X_test.csv", index=False, header=False)
-        pd.DataFrame(y_train).to_csv(output_path / "y_train.csv", index=False, header=False)
-        pd.DataFrame(y_test).to_csv(output_path / "y_test.csv", index=False, header=False)
+        pd.DataFrame(X_train).to_csv(
+            output_path / "X_train.csv", index=False, header=False
+        )
+        pd.DataFrame(X_test).to_csv(
+            output_path / "X_test.csv", index=False, header=False
+        )
+        pd.DataFrame(y_train).to_csv(
+            output_path / "y_train.csv", index=False, header=False
+        )
+        pd.DataFrame(y_test).to_csv(
+            output_path / "y_test.csv", index=False, header=False
+        )
         print(f"Train and test data saved to directory: {output_path}")
 
     return X_train, X_test, y_train, y_test
@@ -130,7 +146,7 @@ def prepare_model_data(jams_path: str, save_files: bool = False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Utilities for prepping model data.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     group = parser.add_mutually_exclusive_group(required=True)
@@ -139,20 +155,20 @@ if __name__ == "__main__":
         "--process-billboard",
         metavar="BILLBOARD_PATH",
         type=str,
-        help="Process billboard data to generate ALL jams files"
+        help="Process billboard data to generate ALL jams files",
     )
 
     group.add_argument(
         "--prepare-model-data",
         metavar="JAMS_PATH",
         type=str,
-        help="Prepare model data from specified jams file"
+        help="Prepare model data from specified jams file",
     )
     parser.add_argument(
         "-s",
         "--save",
         action="store_true",
-        help="Save files when using --prepare-model (ignored for other operations)"
+        help="Save files when using --prepare-model (ignored for other operations)",
     )
 
     args = parser.parse_args()
