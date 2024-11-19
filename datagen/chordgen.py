@@ -39,8 +39,9 @@ def generate_chord(root_note:int, intervals:list, velocity=64, ticks=1920):
     midi.tracks.append(track)
     for interval in intervals:
         track.append(Message('note_on', note=root_note + interval, velocity=velocity, time=0))
-    for interval in intervals:
-        track.append(Message('note_off', note=root_note + interval, velocity=velocity, time=ticks))
+    track.append(Message('note_off', note=root_note + intervals[0], velocity=velocity, time=ticks))
+    for interval in intervals[1:]:
+        track.append(Message('note_off', note=root_note + interval, velocity=velocity, time=0))
     return midi
 
 def generate_all_chords(start_octave=0, end_octave=7):
