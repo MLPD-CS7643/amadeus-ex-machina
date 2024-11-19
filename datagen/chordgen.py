@@ -51,7 +51,7 @@ def generate_all_chords(start_octave=0, end_octave=7):
                 midi = generate_chord(root, intervals)
                 dir = f"{BASE_DIR}octave_{octave}"
                 note_name = note_lookup(root)
-                filename = f"{note_name}{chord_type}.mid"
+                filename = f"oct{octave}_{note_name}{chord_type}.mid"
                 if not os.path.exists(dir):
                     os.makedirs(dir)
                 midi.save(f"{dir}/{filename}")
