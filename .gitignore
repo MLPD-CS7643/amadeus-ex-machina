@@ -37,7 +37,12 @@ wheels/
 *.egg
 MANIFEST
 
+# Audio Files
+*.mid
+*.wav
+*.mp3
+
 # Don't upload massive data files to git
 data/raw/
 data/processed/
-*.wav
+datagen/chords/
