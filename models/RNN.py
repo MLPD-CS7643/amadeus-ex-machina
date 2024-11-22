@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torch
-import numpy as np
 
 
 class RNNModel(nn.Module):
@@ -23,31 +22,43 @@ class RNNModel(nn.Module):
         self.output_size = output_size
 
         # initialize block that creates hidden
-        self.hidden = nn.Linear(input_size + hidden_size, hidden_size)
+        self.hidden_layer = nn.Linear(input_size + hidden_size, hidden_size)
         self.tanh = nn.Tanh()
 
         # initialize block that creates output
-        self.output = nn.Linear(input_size + hidden_size, output_size)
+        self.output_layer = nn.Linear(input_size + hidden_size, output_size)
         self.log_softmax = nn.LogSoftmax(dim=1)
 
-    def forward(self, input, hidden):
+        # Initialize the hidden state as None
+        self.hidden_state = None
+
+    def forward(self, input):
         """Forward pass of RNN
         Args:
             input (tensor): a batch of data of shape (batch_size, input_size) at one time step
-            hidden (tensor): the hidden value of previous time step of shape (batch_size, hidden_size)
 
         Returns:
             output (tensor): the output tensor of shape (batch_size, output_size)
-            hidden (tensor): the hidden value of current time step of shape (batch_size, hidden_size)
         """
+        # Automatically initialize the hidden state if it's not set
+        if self.hidden_state is None or self.hidden_state.size(0) != input.size(0):
+            self.hidden_state = torch.zeros(input.size(0), self.hidden_size, device=input.device)
 
-        # concatenate input vector and hidden state
-        conc = torch.cat((input, hidden), 1)
+        # Flatten input if it has more than 2 dimensions
+        if input.dim() > 2:
+            input = input.view(input.size(0), -1)
 
-        # pass conc through hidden layer + apply tanh
-        hidden = self.tanh(self.hidden(conc))
+        # Validate input size
+        assert input.size(1) == self.input_size, \
+            f"Expected input size {self.input_size}, but got {input.size(1)}."
 
-        # pass conc through output layer + apply log softmax
-        output = self.log_softmax(self.output(conc))
+        # Concatenate input vector and hidden state
+        conc = torch.cat((input, self.hidden_state), dim=1)
 
-        return output, hidden
+        # Update hidden state
+        self.hidden_state = self.tanh(self.hidden_layer(conc))
+
+        # Compute output
+        output = self.log_softmax(self.output_layer(conc))
+
+        return output

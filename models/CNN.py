@@ -4,42 +4,35 @@ import numpy as np
 
 
 class CNNModel(nn.Module):
-    # An CNN model
+    # A CNN model
+    def __init__(self, input_channels, num_classes):
+        """Initialize the CNN model"""
+        super(CNNModel, self).__init__()
 
-    def __init__(self):
-        """Initialize the CNN model
-        Args:
-            None
-
-        Returns:
-            None
-        """
-        super().__init__()
-
-        # conv layer
+        # Convolutional layer
         self.conv1 = nn.Conv2d(
-            in_channels=3, out_channels=64, kernel_size=7, stride=1, padding=0
+            in_channels=input_channels, out_channels=64, kernel_size=7, stride=1, padding=0
         )
 
-        # max pooling layer
+        # Max pooling layer
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
 
-        # conv output: (32 - 7) / 1 + 1 = 26 x 26
-        # pooling output: 26 / 2 = 13 x 13
-        # filters: 64
-        # classes: 10
-        self.fc = nn.Linear(64 * 13 * 13, 10)
+        # Placeholder for the fully connected layer
+        self.fc = None
+        self.num_classes = num_classes
 
     def forward(self, x):
-
-        # conv layer
+        # Convolutional layer
         x = self.conv1(x)
-
-        # relu
         x = torch.relu(x)
 
-        # max pooling layer
+        # Max pooling layer
         x = self.pool(x)
 
-        # flatten input through fully connected layer
-        return self.fc(torch.flatten(x, 1))
+        # Flatten input through fully connected layer
+        if self.fc is None:  # Initialize self.fc dynamically
+            flattened_size = x.view(x.size(0), -1).size(1)
+            self.fc = nn.Linear(flattened_size, self.num_classes).to(x.device)
+
+        x = self.fc(torch.flatten(x, 1))
+        return x
