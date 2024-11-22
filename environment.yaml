@@ -14,9 +14,9 @@ dependencies:
   - pandas
   - scipy
   - scikit-learn
-  - torchaudio
   - pip
   - pip:
+      - torchaudio
       - librosa
       - jams
       - mido
