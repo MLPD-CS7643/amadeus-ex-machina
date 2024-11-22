@@ -1,10 +1,15 @@
 import os
 import json
+import argparse
 from mido import Message, MidiFile, MidiTrack
+from wavgen import batch_process_midi
 
 JSON_FILE = "chord_ref.json"
 
-BASE_DIR = "datagen/chords"
+BASE_DIR = "datagen/chords/"
+MIDI_DIR = f"{BASE_DIR}midi/"
+WAV_DIR = f"./{BASE_DIR}wav/"
+SF2_DIR = "datagen/sf2/"
 
 C0 = 12
 
@@ -47,24 +52,23 @@ def generate_chord(root_note:int, intervals:list, velocity=64, ticks=1920):
         track.append(Message("note_off", note=root_note + interval, velocity=velocity, time=0))
     return midi
 
-def generate_all_chords(start_octave:int=0, end_octave:int=7):
+def generate_all_chords(start_octave:int=4, end_octave:int=4):
     json_out = {}
-    dir = f"{BASE_DIR}/midi"
-    if not os.path.exists(dir):
-        os.makedirs(dir)
+    if not os.path.exists(MIDI_DIR):
+        os.makedirs(MIDI_DIR)
     for octave in range(start_octave, end_octave+1):
         for i in range(12):
             root = C0 + octave * 12 + i
             for chord_class, intervals in CHORDS.items():
                 midi = generate_chord(root, intervals)
-                
                 note_name = note_lookup(root)
                 filename = f"oct{octave}_{note_name}{chord_class}"
-
-                midi.save(f"{dir}/{filename}.mid")
+                filepath = f"{MIDI_DIR}{filename}.mid"
+                midi.save(filepath)
                 json_out[filename] = {
                     "root": note_name,
                     "chord_class": chord_class,
+                    "billboard_notation": f"{note_name}:{chord_class}",
                     "octave": octave
                 }
     save_json(json_out)
@@ -73,8 +77,28 @@ def save_json(out:dict):
     dumps = json.dumps(out)
     if not os.path.exists(BASE_DIR):
         os.makedirs(BASE_DIR)
-    with open(f"{BASE_DIR}/{JSON_FILE}", 'w') as outfile:
+    with open(f"{BASE_DIR}{JSON_FILE}", 'w') as outfile:
         outfile.write(dumps)
 
+def main(args=None):
+    print("Generating midi chords...")
+    generate_all_chords()
+    print("DONE!")
+    if args and args.wav:
+        print("Generating wav from midi...")
+        if not os.path.exists(WAV_DIR):
+            os.makedirs(WAV_DIR)
+        # Load SoundFonts
+        soundfonts = [os.path.join(SF2_DIR, f) for f in os.listdir(SF2_DIR) if f.endswith('.sf2')]
+        if not soundfonts:
+            print("No SoundFonts found in the soundfonts directory!")
+            return
+        # Process MIDI files with each SoundFont
+        batch_process_midi(MIDI_DIR, soundfonts, WAV_DIR)
+        print("DONE!")
 
-generate_all_chords()
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-w', '--wav', action='store_true', help='generate wav after generating midi')
+    args = parser.parse_args()
+    main(args)
