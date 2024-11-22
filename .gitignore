@@ -49,3 +49,6 @@ MANIFEST
 data/raw/
 data/processed/
 datagen/chords/
+
+# Secrets
+secrets/
