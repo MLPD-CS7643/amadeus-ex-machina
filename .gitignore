@@ -48,4 +48,5 @@ data/processed/
 datagen/chords/
 
 # Secrets
-secrets/
+secrets/*
+!secrets/.gitkeep
