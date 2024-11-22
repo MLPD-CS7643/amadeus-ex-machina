@@ -4,7 +4,7 @@ import argparse
 from mido import Message, MidiFile, MidiTrack
 from zipfile import ZipFile
 from wavgen import batch_process_midi
-from gdrive import download_from_gdrive
+#from utils.gdrive import download_from_gdrive
 
 
 JSON_FILE = "chord_ref.json"
@@ -99,8 +99,8 @@ def main(args=None):
     print("Generating midi chords...")
     generate_all_chords()
     print("DONE!")
-    if True:
-        if True:
+    if args and args.wav:
+        if args.download:
             __fetch_sf2_archive()
         print("Generating wav from midi...")
         if not os.path.exists(WAV_DIR):
