@@ -1,20 +1,68 @@
 from pathlib import Path
+import yaml
 
 import torch
+import torch.nn as nn
+import torch.optim as optim
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from models.mlp_chord_classifier import MLPChordClassifier
+
 
 class Solver:
-    def __init__(self, model, optimizer, criterion, scheduler=None, device="cpu"):
-        self.model = model.to(device)
-        self.optimizer = optimizer
-        self.criterion = criterion
-        self.scheduler = scheduler
-        self.device = device
+    def __init__(
+        self, model=None, optimizer=None, criterion=None, scheduler=None, **kwargs
+    ):
+        self.batch_size = kwargs.pop("batch_size", 128)
+        self.model_type = kwargs.pop("model_type", "MLPChordClassifier")
+        self.model_kwargs = kwargs.pop("model_kwargs", {})
+        self.device = kwargs.pop("device", "cpu")
+        self.lr = kwargs.pop("learning_rate", 0.001)
+        self.epochs = kwargs.pop("epochs", 10)
+
+        if model:
+            self.model = model.to(self.device)
+        else:
+            match self.model_type:
+                case "MLPChordClassifier":
+                    self.model = MLPChordClassifier(**self.model_kwargs)
+                case _:
+                    self.model = MLPChordClassifier(**self.model_kwargs)
+
+        if optimizer:
+            self.optimizer = optimizer
+        else:
+            self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+
+        if criterion:
+            self.criterion = criterion
+        else:
+            self.criterion = nn.CrossEntropyLoss()
+
+        if scheduler:
+            self.scheduler = scheduler
+        else:
+            self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
+
         self.train_accuracy_history = []
         self.valid_accuracy_history = []
+
+    @classmethod
+    def from_yaml(cls, cfg_path: str, **dynamic_kwargs):
+        with open(cfg_path, "r") as fin:
+            config = yaml.safe_load(fin)
+
+        kwargs = {}
+        for k, v in config.items():
+            if k != "description":
+                kwargs[k] = v
+
+        if dynamic_kwargs:
+            kwargs["model_kwargs"] = dynamic_kwargs
+
+        return cls(**kwargs)
 
     def train(self, dataloader):
         self.model.train()
