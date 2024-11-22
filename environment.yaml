@@ -12,7 +12,10 @@ dependencies:
   - torchvision
   - black
   - pandas
+  - scipy
+  - scikit-learn
   - pip
   - pip:
+      - librosa
       - jams
       - mido

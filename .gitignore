@@ -42,6 +42,9 @@ MANIFEST
 *.wav
 *.mp3
 
+# Soundfonts
+*.sf2
+
 # Don't upload massive data files to git
 data/raw/
 data/processed/
