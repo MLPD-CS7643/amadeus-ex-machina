@@ -4,8 +4,10 @@ import argparse
 
 import pandas as pd
 import jams
+import torch
+from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler, LabelEncoder, OneHotEncoder
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 
 
@@ -112,11 +114,14 @@ def prepare_model_data(jams_path: str, save_files: bool = False):
             chord_index += 1
         labels.append(chord_data[chord_index][1])
 
+    labels = np.array(labels)
+
     scaler = MinMaxScaler()
     features_scaled = scaler.fit_transform(features)
 
     label_encoder = LabelEncoder()
     labels_encoded = label_encoder.fit_transform(labels)
+
     X_train, X_test, y_train, y_test = train_test_split(
         features_scaled, labels_encoded, test_size=0.2, random_state=42
     )
@@ -140,7 +145,29 @@ def prepare_model_data(jams_path: str, save_files: bool = False):
         )
         print(f"Train and test data saved to directory: {output_path}")
 
-    return X_train, X_test, y_train, y_test
+    return X_train, X_test, y_train, y_test, scaler, label_encoder
+
+
+def build_data_loaders(jams_path: str, save_files: bool = False, batch_size: int = 64):
+    """Create usable data loaders out of the preprocessed model data"""
+    X_train, X_test, y_train, y_test, scaler, label_encoder = prepare_model_data(
+        jams_path, save_files
+    )
+    X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+    y_train_tensor = torch.tensor(
+        y_train, dtype=torch.long
+    )  # Long tensor for class labels
+
+    X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
+    y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+
+    train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+    test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+
+    return train_loader, test_loader
 
 
 if __name__ == "__main__":

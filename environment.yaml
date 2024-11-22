@@ -6,7 +6,6 @@ dependencies:
   - numpy
   - pyyaml
   - matplotlib
-  - plotly
   - jupyter
   - pytest
   - pytorch
@@ -15,7 +14,6 @@ dependencies:
   - pandas
   - scipy
   - scikit-learn
-  - tqdm
   - pip
   - pip:
       - librosa
