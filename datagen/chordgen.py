@@ -1,7 +1,10 @@
 import os
+import json
 from mido import Message, MidiFile, MidiTrack
 
-BASE_DIR = "datagen/chords/midi/"
+JSON_FILE = "chord_ref.json"
+
+BASE_DIR = "datagen/chords"
 
 C0 = 12
 
@@ -38,23 +41,40 @@ def generate_chord(root_note:int, intervals:list, velocity=64, ticks=1920):
     track = MidiTrack()
     midi.tracks.append(track)
     for interval in intervals:
-        track.append(Message('note_on', note=root_note + interval, velocity=velocity, time=0))
-    track.append(Message('note_off', note=root_note + intervals[0], velocity=velocity, time=ticks))
+        track.append(Message("note_on", note=root_note + interval, velocity=velocity, time=0))
+    track.append(Message("note_off", note=root_note + intervals[0], velocity=velocity, time=ticks))
     for interval in intervals[1:]:
-        track.append(Message('note_off', note=root_note + interval, velocity=velocity, time=0))
+        track.append(Message("note_off", note=root_note + interval, velocity=velocity, time=0))
     return midi
 
-def generate_all_chords(start_octave=0, end_octave=7):
+def generate_all_chords(start_octave:int=0, end_octave:int=7):
+    json_out = {}
+    dir = f"{BASE_DIR}/midi"
+    if not os.path.exists(dir):
+        os.makedirs(dir)
     for octave in range(start_octave, end_octave+1):
         for i in range(12):
             root = C0 + octave * 12 + i
-            for chord_type, intervals in CHORDS.items():
+            for chord_class, intervals in CHORDS.items():
                 midi = generate_chord(root, intervals)
-                dir = f"{BASE_DIR}octave_{octave}"
+                
                 note_name = note_lookup(root)
-                filename = f"oct{octave}_{note_name}{chord_type}.mid"
-                if not os.path.exists(dir):
-                    os.makedirs(dir)
-                midi.save(f"{dir}/{filename}")
+                filename = f"oct{octave}_{note_name}{chord_class}"
+
+                midi.save(f"{dir}/{filename}.mid")
+                json_out[filename] = {
+                    "root": note_name,
+                    "chord_class": chord_class,
+                    "octave": octave
+                }
+    save_json(json_out)
+
+def save_json(out:dict):
+    dumps = json.dumps(out)
+    if not os.path.exists(BASE_DIR):
+        os.makedirs(BASE_DIR)
+    with open(f"{BASE_DIR}/{JSON_FILE}", 'w') as outfile:
+        outfile.write(dumps)
+
 
 generate_all_chords()

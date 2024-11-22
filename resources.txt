@@ -1,0 +1,4 @@
+# Throw in any links you use as you work/research so we can cite
+
+- Inspiration for CRNN model: https://github.com/keunwoochoi/music-auto_tagging-keras
+- Sample pytorch audio processing logic: https://github.com/musikalkemist/pytorchforaudio/tree/main
