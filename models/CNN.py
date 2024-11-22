@@ -2,19 +2,20 @@ import torch.nn as nn
 import torch
 import numpy as np
 
-class CNNModel(nn.Module): 
+
+class CNNModel(nn.Module):
     # An CNN model
 
     def __init__(self):
-        """ Initialize the CNN model
-            Args:
-                None
+        """Initialize the CNN model
+        Args:
+            None
 
-            Returns: 
-                None
+        Returns:
+            None
         """
         super().__init__()
-        
+
         # conv layer
         self.conv1 = nn.Conv2d(
             in_channels=3, out_channels=64, kernel_size=7, stride=1, padding=0
@@ -30,7 +31,7 @@ class CNNModel(nn.Module):
         self.fc = nn.Linear(64 * 13 * 13, 10)
 
     def forward(self, x):
-        
+
         # conv layer
         x = self.conv1(x)
 
