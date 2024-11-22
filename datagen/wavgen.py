@@ -53,24 +53,19 @@ def synthesize_to_wav(midi_path, soundfont_path, instrument_id, output_file):
 
 def batch_process_midi(midi_path, soundfonts, output_path):
     """Batch process MIDI files with multiple SoundFonts."""
-    count = 0
     for soundfont in soundfonts:
         sf_name = os.path.basename(soundfont).replace('.sf2', '')
         print(f"Using SoundFont: {sf_name}")
-        counter = 0
+        
+        #for instrument in range(0, 128):
+        for midi_file in os.listdir(midi_path):
+            if midi_file.endswith('.mid'):
+                input_file = os.path.join(midi_path, midi_file)
+                output_file = os.path.join(output_path, f"{midi_file[:-4]}_{sf_name}.wav")
 
-        for instrument in range(0, 128):
-
-            for midi_file in os.listdir(midi_path):
-                if counter >= 5:
-                    break
-                if midi_file.endswith('.mid'):
-                    input_file = os.path.join(midi_path, midi_file)
-                    output_file = os.path.join(output_path, f"{sf_name}_{midi_file.replace('.mid', '.wav')}")
-
-                    print(f"Converting {midi_file} with {sf_name} to {output_file}")
-                    synthesize_to_wav(input_file, soundfont, instrument, output_file)
-                    counter += 1
+                print(f"Converting {midi_file} with {sf_name} to {output_file}")
+                synthesize_to_wav(input_file, soundfont, 0, output_file)
+                #synthesize_to_wav(input_file, soundfont, instrument, output_file)
 
 
 def main():
