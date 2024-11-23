@@ -5,18 +5,18 @@ import tinysoundfont as tsf
 import wave
 
 # Paths
-MIDI_FILES_PATH = "./midi_files/"
+MIDI_FILES_PATH = "./test_midi/"
 SOUNDFONTS_PATH = "./soundfonts/"
-OUTPUT_PATH = "./output/"
+OUTPUT_PATH = "./wav_out/"
 
 # Ensure output directory exists
 os.makedirs(OUTPUT_PATH, exist_ok=True)
 
-def synthesize_to_wav(midi_path, soundfont_path, instrument_id, output_file):
+def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=55, preset_id=3):   
     # Initialize the synthesizer and load the soundfont
-    synth = tsf.Synth()
+    synth = tsf.Synth(gain=0)
     soundfont_id = synth.sfload(soundfont_path)
-    synth.program_select(0, soundfont_id, 0, 0)
+    synth.program_select(instrument_id, soundfont_id, 0, preset_id)
 
     # Start the synthesizer (assumes correct setup prior to this point)
     synth.start()
@@ -28,7 +28,7 @@ def synthesize_to_wav(midi_path, soundfont_path, instrument_id, output_file):
     # Collect audio samples into a list
     audio_samples = []
     sample_rate = 44100  # Define the sample rate
-    seconds_to_generate = 2  # Define how many seconds of audio to generate based on MIDI length estimation
+    seconds_to_generate = 3  # Define how many seconds of audio to generate based on MIDI length estimation
     samples_per_chunk = 4096  # Number of samples per chunk
     total_samples = sample_rate * seconds_to_generate  # Total samples to generate
 
@@ -41,12 +41,15 @@ def synthesize_to_wav(midi_path, soundfont_path, instrument_id, output_file):
     # Concatenate all collected audio data
     full_audio = np.concatenate(audio_samples)
 
+    # Convert float32 to int16
+    int_audio = np.int16(full_audio * 32767)
+
     # Save the synthesized audio to a WAV file
     with wave.open(output_file, 'wb') as wf:
         wf.setnchannels(2)  # Stereo
         wf.setsampwidth(4)  # Bytes per sample, float32
         wf.setframerate(sample_rate)  # Sample rate in Hz
-        wf.writeframes(full_audio.tobytes())
+        wf.writeframes(int_audio.tobytes())
 
     synth.stop()
 
@@ -64,7 +67,7 @@ def batch_process_midi(midi_path, soundfonts, output_path):
                 output_file = os.path.join(output_path, f"{midi_file[:-4]}_{sf_name}.wav")
 
                 print(f"Converting {midi_file} with {sf_name} to {output_file}")
-                synthesize_to_wav(input_file, soundfont, 0, output_file)
+                synthesize_to_wav(input_file, soundfont, output_file, 0)
                 #synthesize_to_wav(input_file, soundfont, instrument, output_file)
 
 
