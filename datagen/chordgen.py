@@ -3,8 +3,8 @@ import json
 import argparse
 from mido import Message, MidiFile, MidiTrack
 from zipfile import ZipFile
-from wavgen import batch_process_midi
-#from utils.gdrive import download_from_gdrive
+from datagen.wavgen import batch_process_midi
+from utils.gdrive import download_from_gdrive
 
 
 JSON_FILE = "chord_ref.json"
@@ -38,8 +38,25 @@ CHORDS = {
     "7b9": [0, 4, 7, 10, 13]
 }
 
+def generate_all_chords(download_sf2=False):
+    print("Generating midi chords...")
+    generate_all_midi_chords()
+    print("DONE!")
+    if download_sf2:
+        __fetch_sf2_archive()
+    print("Generating wav from midi...")
+    if not os.path.exists(WAV_DIR):
+        os.makedirs(WAV_DIR)
+    # Load SoundFonts
+    soundfonts = [os.path.join(SF2_DIR, f) for f in os.listdir(SF2_DIR) if f.endswith('.sf2')]
+    if not soundfonts:
+        print("No SoundFonts found in the soundfonts directory!")
+        return
+    # Process MIDI files with each SoundFont
+    batch_process_midi(MIDI_DIR, soundfonts, WAV_DIR)
+    print("DONE!")
 
-def generate_all_chords(start_octave:int=4, end_octave:int=4):
+def generate_all_midi_chords(start_octave:int=4, end_octave:int=4):
     json_out = {}
     if not os.path.exists(MIDI_DIR):
         os.makedirs(MIDI_DIR)
@@ -47,7 +64,7 @@ def generate_all_chords(start_octave:int=4, end_octave:int=4):
         for i in range(12):
             root = C0 + octave * 12 + i
             for chord_class, intervals in CHORDS.items():
-                midi = __generate_chord(root, intervals)
+                midi = __generate_midi_chord(root, intervals)
                 note_name = __note_lookup(root)
                 filename = f"oct{octave}_{note_name}{chord_class}"
                 filepath = f"{MIDI_DIR}{filename}.mid"
@@ -60,7 +77,7 @@ def generate_all_chords(start_octave:int=4, end_octave:int=4):
                 }
     __save_json(json_out)
 
-def __generate_chord(root_note:int, intervals:list, velocity=64, ticks=1920):
+def __generate_midi_chord(root_note:int, intervals:list, velocity=64, ticks=1920):
     midi = MidiFile()
     track = MidiTrack()
     midi.tracks.append(track)
@@ -96,27 +113,13 @@ def __fetch_sf2_archive():
     print("DONE!")
 
 def main(args=None):
-    print("Generating midi chords...")
-    generate_all_chords()
-    print("DONE!")
-    if args and args.wav:
-        if args.download:
-            __fetch_sf2_archive()
-        print("Generating wav from midi...")
-        if not os.path.exists(WAV_DIR):
-            os.makedirs(WAV_DIR)
-        # Load SoundFonts
-        soundfonts = [os.path.join(SF2_DIR, f) for f in os.listdir(SF2_DIR) if f.endswith('.sf2')]
-        if not soundfonts:
-            print("No SoundFonts found in the soundfonts directory!")
-            return
-        # Process MIDI files with each SoundFont
-        batch_process_midi(MIDI_DIR, soundfonts, WAV_DIR)
-        print("DONE!")
+    download = False
+    if args:
+        download = args.download
+    generate_all_chords(download)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-w', '--wav', action='store_true', help='generate wav after generating midi')
     parser.add_argument('-d', '--download', action='store_true', help='download sf2 archive from gdrive')
     args = parser.parse_args()
     main(args)
