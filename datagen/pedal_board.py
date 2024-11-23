@@ -1,18 +1,31 @@
 import librosa
 import numpy as np
 from scipy.signal import convolve
-from scipy.signal import lfilter
+from scipy.signal import lfilter, butter
 import soundfile as sf
 import os
 
 INPUT_PATH = "./wav_out/"
 OUTPUT_PATH = "./fx_out/"
 
+def generate_synthetic_ir(duration=1.0, sr=44100, decay_rate=0.1):
+    # Generate white noise
+    noise = np.random.normal(0, 1, int(sr * duration))
+    
+    # Apply exponential decay
+    decay = np.exp(-decay_rate * np.arange(len(noise)))
+    ir = noise * decay
+    
+    # Apply a low-pass filter to simulate high frequency absorption
+    b, a = butter(4, 0.2, 'low')  # Low-pass filter with cutoff frequency at 20% of Nyquist
+    ir = lfilter(b, a, ir)
+    
+    return ir
+
 def reverb(y, sr):
     # Generate or load an impulse response
     # For simplicity, we'll create a simple reverb impulse here
-    ir = np.random.randn(int(sr * 0.3))  # 0.3 seconds of white noise
-    ir /= np.sum(ir**2)  # Normalize impulse response
+    ir = generate_synthetic_ir()
 
     # Apply convolution to simulate reverb
     reverbed = convolve(y, ir, mode='full')[:len(y)]
@@ -99,7 +112,7 @@ def process_directory(input_path, output_path, effect_func):
         if file_name.endswith(".wav"):
             # Load the audio file
             file_path = os.path.join(input_path, file_name)
-            y, sr = librosa.load(file_path, sr=None)
+            y, sr = librosa.load(file_path, sr=None) #sample, sample rate
             
             # Apply the effect
             processed_audio = effect_func(y, sr)
