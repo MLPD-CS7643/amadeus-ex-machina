@@ -9,8 +9,6 @@ MIDI_FILES_PATH = "./test_midi/"
 SOUNDFONTS_PATH = "./soundfonts/"
 OUTPUT_PATH = "./wav_out/"
 
-# Ensure output directory exists
-os.makedirs(OUTPUT_PATH, exist_ok=True)
 
 def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=55, preset_id=0):   
     # Initialize the synthesizer and load the soundfont
