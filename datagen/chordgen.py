@@ -14,6 +14,9 @@ BASE_DIR = "./chordgen"
 WAV_DIR = "wav"
 SF2_DIR = "sf2"
 
+SAMPLE_RATE = 44100
+BIT_DEPTH = 16
+
 C0 = 12
 
 NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -76,13 +79,17 @@ def generate_all_chords(download_sf2:bool=False, start_octave:int=4, end_octave:
                     wav_filename = f"{mid_filename}_{sf_name}"
                     wav_filepath = wav_path / f"{wav_filename}.wav"
                     sf_filepath = sf2_path / f"{sf_name}.sf2"
-                    synthesize_to_wav(str(mid_filepath.absolute()), str(sf_filepath.absolute()), str(wav_filepath.absolute()))
+                    synthesize_to_wav(str(mid_filepath.absolute()), str(sf_filepath.absolute()), str(wav_filepath.absolute()), sample_rate=SAMPLE_RATE, bit_depth=BIT_DEPTH)
                     json_out[wav_filename] = {
                         "root": note_name,
                         "chord_class": chord_class,
                         "billboard_notation": f"{note_name}:{chord_class}",
                         "octave": octave,
-                        "instrument": sf_name
+                        "instrument": sf_name,
+                        "filename": f"{wav_filename}.wav",
+                        "format": "wav",
+                        "sample_rate": SAMPLE_RATE,
+                        "bit_depth": BIT_DEPTH
                     }
                     print(wav_filename)
                 os.remove(mid_filepath)

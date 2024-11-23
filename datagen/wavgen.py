@@ -9,7 +9,7 @@ MIDI_FILES_PATH = "./test_midi/"
 SOUNDFONTS_PATH = "./soundfonts/"
 OUTPUT_PATH = "./wav_out/"
 
-def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, preset_id=0, seconds_to_generate=2):   
+def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, preset_id=0, seconds_to_generate=2, sample_rate=44100, bit_depth=16):   
     # Initialize the synthesizer and load the soundfont
     synth = tsf.Synth(gain=0)
     soundfont_id = synth.sfload(soundfont_path)
@@ -24,7 +24,6 @@ def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, p
 
     # Collect audio samples into a list
     audio_samples = []
-    sample_rate = 44100  # Define the sample rate
     samples_per_chunk = 4096  # Number of samples per chunk
     total_samples = sample_rate * seconds_to_generate  # Total samples to generate
 
@@ -37,8 +36,13 @@ def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, p
     # Concatenate all collected audio data
     full_audio = np.concatenate(audio_samples)
 
-    # Convert float32 to int16
-    int_audio = np.int16(full_audio * 32767)
+    if bit_depth == 16:
+        # Convert float32 to int16
+        int_audio = np.int16(full_audio * 32767)
+    else:
+        print(f"Unsupported bit depth of {bit_depth}")
+        return
+
 
     # Save the synthesized audio to a WAV file
     with wave.open(output_file, 'wb') as wf:
