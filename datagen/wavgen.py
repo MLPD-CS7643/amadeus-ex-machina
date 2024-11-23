@@ -45,7 +45,7 @@ def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=55, 
     # Save the synthesized audio to a WAV file
     with wave.open(output_file, 'wb') as wf:
         wf.setnchannels(2)  # Stereo
-        wf.setsampwidth(4)  # Bytes per sample, float32
+        wf.setsampwidth(2)  # Bytes per sample, int16
         wf.setframerate(sample_rate)  # Sample rate in Hz
         wf.writeframes(int_audio.tobytes())
 
