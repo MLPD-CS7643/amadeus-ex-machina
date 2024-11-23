@@ -12,7 +12,7 @@ OUTPUT_PATH = "./wav_out/"
 # Ensure output directory exists
 os.makedirs(OUTPUT_PATH, exist_ok=True)
 
-def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=55, preset_id=3):   
+def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=55, preset_id=0):   
     # Initialize the synthesizer and load the soundfont
     synth = tsf.Synth(gain=0)
     soundfont_id = synth.sfload(soundfont_path)
@@ -33,7 +33,7 @@ def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=55, 
     total_samples = sample_rate * seconds_to_generate  # Total samples to generate
 
     # Generating and collecting audio samples
-    for _ in range(0, total_samples, samples_per_chunk):
+    for _ in range(0, total_samples+1, samples_per_chunk):
         buffer = synth.generate(samples_per_chunk)  # Generates and returns a memoryview
         audio_data = np.frombuffer(buffer, dtype=np.float32).reshape(-1, 2)
         audio_samples.append(audio_data)
