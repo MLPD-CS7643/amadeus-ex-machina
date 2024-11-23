@@ -1,19 +1,18 @@
 import os
 import json
-import argparse
+from pathlib import Path
 from mido import Message, MidiFile, MidiTrack
 from zipfile import ZipFile
-from datagen.wavgen import batch_process_midi
+from datagen.wavgen import synthesize_to_wav
 from utils.gdrive import download_from_gdrive
 
 
 JSON_FILE = "chord_ref.json"
 SF2_ARCHIVE = "sf2.zip"
 
-BASE_DIR = "datagen/chords/"
-MIDI_DIR = f"{BASE_DIR}midi/"
-WAV_DIR = f"./{BASE_DIR}wav/"
-SF2_DIR = "datagen/sf2/"
+BASE_DIR = "./chordgen"
+WAV_DIR = "wav"
+SF2_DIR = "sf2"
 
 C0 = 12
 
@@ -38,44 +37,58 @@ CHORDS = {
     "7b9": [0, 4, 7, 10, 13]
 }
 
-def generate_all_chords(download_sf2=False):
-    print("Generating midi chords...")
-    generate_all_midi_chords()
-    print("DONE!")
-    if download_sf2:
-        __fetch_sf2_archive()
-    print("Generating wav from midi...")
-    if not os.path.exists(WAV_DIR):
-        os.makedirs(WAV_DIR)
-    # Load SoundFonts
-    soundfonts = [os.path.join(SF2_DIR, f) for f in os.listdir(SF2_DIR) if f.endswith('.sf2')]
-    if not soundfonts:
-        print("No SoundFonts found in the soundfonts directory!")
-        return
-    # Process MIDI files with each SoundFont
-    batch_process_midi(MIDI_DIR, soundfonts, WAV_DIR)
-    print("DONE!")
+def generate_all_chords(download_sf2:bool=False, start_octave:int=4, end_octave:int=4, out_dir=BASE_DIR):
+    """
+    Generates .wav files for all defined chords using all available SoundFonts.
+    Also saves chord_ref.json lookup table with metadata.
 
-def generate_all_midi_chords(start_octave:int=4, end_octave:int=4):
+    Args:
+        download_sf2 (bool): download repository of SoundFonts
+        start_octave (int): first octave (min 0)
+        end_octave (int): last octave (max 7)
+        out_dir (str): output directory
+    
+    Returns:
+        None
+    """
+    base_path = Path(out_dir)
+    sf2_path = base_path / SF2_DIR
+    wav_path = base_path / WAV_DIR
+    if download_sf2:
+        __fetch_sf2_archive(sf2_path)
+    soundfont_names = [f[:-4] for f in os.listdir(sf2_path) if f.endswith('.sf2')]
+    if not soundfont_names:
+        print(f"No SoundFonts found in {sf2_path}!")
+        return
+    os.makedirs(wav_path, exist_ok=True)
     json_out = {}
-    if not os.path.exists(MIDI_DIR):
-        os.makedirs(MIDI_DIR)
+    print("Starting chord generation...")
     for octave in range(start_octave, end_octave+1):
         for i in range(12):
             root = C0 + octave * 12 + i
             for chord_class, intervals in CHORDS.items():
                 midi = __generate_midi_chord(root, intervals)
                 note_name = __note_lookup(root)
-                filename = f"oct{octave}_{note_name}{chord_class}"
-                filepath = f"{MIDI_DIR}{filename}.mid"
-                midi.save(filepath)
-                json_out[filename] = {
-                    "root": note_name,
-                    "chord_class": chord_class,
-                    "billboard_notation": f"{note_name}:{chord_class}",
-                    "octave": octave
-                }
-    __save_json(json_out)
+                mid_filename = f"{note_name}{chord_class}_O{octave}"
+                mid_filepath = wav_path / f"{mid_filename}.mid"
+                midi.save(mid_filepath)
+                for sf_name in soundfont_names:
+                    wav_filename = f"{mid_filename}_{sf_name}"
+                    wav_filepath = wav_path / f"{wav_filename}.wav"
+                    sf_filepath = sf2_path / f"{sf_name}.sf2"
+                    synthesize_to_wav(str(mid_filepath.absolute()), str(sf_filepath.absolute()), str(wav_filepath.absolute()))
+                    json_out[wav_filename] = {
+                        "root": note_name,
+                        "chord_class": chord_class,
+                        "billboard_notation": f"{note_name}:{chord_class}",
+                        "octave": octave,
+                        "instrument": sf_name
+                    }
+                    print(wav_filename)
+                os.remove(mid_filepath)
+    print("Saving lookup table...")
+    __save_json(json_out, base_path)
+    print("Fin~")
 
 def __generate_midi_chord(root_note:int, intervals:list, velocity=64, ticks=1920):
     midi = MidiFile()
@@ -95,31 +108,17 @@ def __note_lookup(midi_note:int, include_octave=False):
         return f"{NOTES[note_index]}{octave}"
     return f"{NOTES[note_index]}"
 
-def __save_json(out:dict):
-    dumps = json.dumps(out)
-    if not os.path.exists(BASE_DIR):
-        os.makedirs(BASE_DIR)
-    with open(f"{BASE_DIR}{JSON_FILE}", 'w') as outfile:
+def __save_json(data:dict, path):
+    dumps = json.dumps(data)
+    os.makedirs(path, exist_ok=True)
+    with open(path / JSON_FILE, 'w') as outfile:
         outfile.write(dumps)
 
-def __fetch_sf2_archive():
-    print("Downloading sf2.zip from gdrive...")
-    dl_path = f"{SF2_DIR}{SF2_ARCHIVE}"
-    download_from_gdrive(SF2_ARCHIVE, dl_path)
+def __fetch_sf2_archive(path:Path):
+    print("Downloading sf2.zip...")
+    dl_path = path / SF2_ARCHIVE
+    download_from_gdrive(SF2_ARCHIVE, str(dl_path.absolute()))
     print("Extracting sf2.zip...")
     with ZipFile(dl_path, 'r') as zf:
-        zf.extractall(SF2_DIR)
+        zf.extractall(path)
     os.remove(dl_path)
-    print("DONE!")
-
-def main(args=None):
-    download = False
-    if args:
-        download = args.download
-    generate_all_chords(download)
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--download', action='store_true', help='download sf2 archive from gdrive')
-    args = parser.parse_args()
-    main(args)

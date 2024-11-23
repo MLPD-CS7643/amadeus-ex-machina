@@ -9,7 +9,7 @@ MIDI_FILES_PATH = "./test_midi/"
 SOUNDFONTS_PATH = "./soundfonts/"
 OUTPUT_PATH = "./wav_out/"
 
-def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=55, preset_id=0):   
+def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, preset_id=0, seconds_to_generate=2):   
     # Initialize the synthesizer and load the soundfont
     synth = tsf.Synth(gain=0)
     soundfont_id = synth.sfload(soundfont_path)
@@ -25,7 +25,6 @@ def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=55, 
     # Collect audio samples into a list
     audio_samples = []
     sample_rate = 44100  # Define the sample rate
-    seconds_to_generate = 3  # Define how many seconds of audio to generate based on MIDI length estimation
     samples_per_chunk = 4096  # Number of samples per chunk
     total_samples = sample_rate * seconds_to_generate  # Total samples to generate
 
