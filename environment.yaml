@@ -16,8 +16,9 @@ dependencies:
   - scikit-learn
   - pip
   - pip:
+      - torchaudio
       - librosa
       - jams
       - mido
-      - tinysoundfont
       - gdown
+      - tinysoundfont
