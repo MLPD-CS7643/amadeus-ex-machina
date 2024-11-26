@@ -5,7 +5,7 @@ from solver import Solver
 
 
 if __name__ == "__main__":
-    # Pass the path to whatever jams file / associated chroma file you want to test this on
+    # Pass the path to the model config you are using and an associated chroma file you want to run inference on
     model_config = sys.argv[1]
     chroma_path = sys.argv[2]
 
@@ -20,19 +20,18 @@ if __name__ == "__main__":
     num_classes = len(data_processor.label_encoder.classes_)
 
     # Define model arguments
+    # TODO this needs to be...less ugly
     model_kwargs = {
         "input_size": input_size,
         "num_classes": num_classes,
     }
 
-    # Initialize your solver or model
+    # Initialize solver class
     solver = Solver.from_yaml(model_config, **model_kwargs)
 
     # Train and evaluate the model
     solver.train_and_evaluate(train_loader, test_loader, plot_results=True)
 
-    # For inference, you need the scaler and label encoder
-    # They are already available in data_processor
     scaler = data_processor.scaler
     label_encoder = data_processor.label_encoder
 
