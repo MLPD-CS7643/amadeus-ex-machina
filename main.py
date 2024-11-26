@@ -1,38 +1,41 @@
 import sys
 
-from data.data_loader import prepare_model_data, build_data_loaders
+from data.data_loader import BillboardDataProcessor
 from solver import Solver
-
-import numpy as np
 
 
 if __name__ == "__main__":
-    # Pass the path to whatever jams file / associated chroma file you want to test this on
-    jams_path = sys.argv[1]
+    # Pass the path to the model config you are using and an associated chroma file you want to run inference on
+    model_config = sys.argv[1]
     chroma_path = sys.argv[2]
-    model_config = sys.argv[3]
-    X_train, X_test, y_train, y_test, scaler, label_encoder = prepare_model_data(
-        jams_path
-    )
 
-    train_loader, test_loader = build_data_loaders(
-        jams_path,
-        save_files=False,
-        batch_size=32,  # FIXME rework the dataloaders to get batch size from the config
-    )
+    data_processor = BillboardDataProcessor(batch_size=128)
 
-    input_size = X_train.shape[1]
-    num_classes = len(np.unique(y_train))
+    print("Processing data and building data loaders...")
+    train_loader, test_loader = data_processor.build_data_loaders()
 
+    input_size = train_loader.dataset.tensors[0].shape[1]
+
+    # Get number of classes from the label encoder
+    num_classes = len(data_processor.label_encoder.classes_)
+
+    # Define model arguments
+    # TODO this needs to be...less ugly
     model_kwargs = {
         "input_size": input_size,
         "num_classes": num_classes,
     }
 
+    # Initialize solver class
     solver = Solver.from_yaml(model_config, **model_kwargs)
 
-    solver.train_and_evaluate(train_loader, test_loader, epochs=50, plot_results=True)
+    # Train and evaluate the model
+    solver.train_and_evaluate(train_loader, test_loader, plot_results=True)
 
+    scaler = data_processor.scaler
+    label_encoder = data_processor.label_encoder
+
+    # Run inference using the trained model
     solver.run_inference(
         chroma_path,
         scaler,

@@ -119,10 +119,10 @@ class Solver:
         return total_loss, avg_loss, accuracy
 
     def train_and_evaluate(
-        self, train_loader, valid_loader, epochs=20, plot_results=False
+        self, train_loader, valid_loader, plot_results=False
     ):
         best_val_accuracy = 0
-        for epoch_idx in range(epochs):
+        for epoch_idx in range(self.epochs):
             print("-----------------------------------")
             print(f"Epoch {epoch_idx + 1}")
             print("-----------------------------------")
