@@ -7,9 +7,13 @@ import torch.optim as optim
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from tqdm.notebook import tqdm  # For Jupyter notebooks
+from tqdm.notebook import tqdm
 
 from models.mlp_chord_classifier import MLPChordClassifier
+from models.CNN import CNNModel
+from models.CRNN import CRNNModel
+from models.RNN import RNNModel
+from models.griddy_model import GriddyModel
 
 
 class Solver:
@@ -29,7 +33,16 @@ class Solver:
             match self.model_type:
                 case "MLPChordClassifier":
                     self.model = MLPChordClassifier(**self.model_kwargs)
+                case "CNNModel":
+                    self.model = CNNModel(**self.model_kwargs)
+                case "CRNNModel":
+                    self.model = CRNNModel(**self.model_kwargs)
+                case "RNNModel":
+                    self.model = RNNModel(**self.model_kwargs)
+                case "GriddyModel":
+                    self.model = GriddyModel(**self.model_kwargs)
                 case _:
+                    # Default to MLPChordClassifier
                     self.model = MLPChordClassifier(**self.model_kwargs)
 
         if optimizer:
@@ -119,9 +132,7 @@ class Solver:
 
         return total_loss, avg_loss, accuracy
 
-    def train_and_evaluate(
-        self, train_loader, valid_loader, plot_results=False
-    ):
+    def train_and_evaluate(self, train_loader, valid_loader, plot_results=False):
         best_val_accuracy = 0
         for epoch_idx in range(self.epochs):
             print("-----------------------------------")
@@ -133,10 +144,10 @@ class Solver:
             total_loss = 0.0
             total_correct = 0
             total_samples = 0
-            
+
             # Create progress bar for batches
-            progress_bar = tqdm(train_loader, desc=f'Training', leave=True)
-            
+            progress_bar = tqdm(train_loader, desc=f"Training", leave=True)
+
             for inputs, labels in progress_bar:
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
@@ -151,17 +162,16 @@ class Solver:
                 _, predicted = torch.max(outputs, 1)
                 batch_correct = (predicted == labels).sum().item()
                 batch_accuracy = batch_correct / labels.size(0)
-                
+
                 # Update epoch statistics
                 total_loss += loss.item() * inputs.size(0)
                 total_correct += batch_correct
                 total_samples += labels.size(0)
 
                 # Update progress bar description
-                progress_bar.set_postfix({
-                    'loss': f'{loss.item():.4f}',
-                    'accuracy': f'{batch_accuracy:.4f}'
-                })
+                progress_bar.set_postfix(
+                    {"loss": f"{loss.item():.4f}", "accuracy": f"{batch_accuracy:.4f}"}
+                )
 
             # Calculate epoch-level training metrics
             avg_train_loss = total_loss / total_samples
