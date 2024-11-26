@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
 from joblib import Parallel, delayed
+import torch.utils
 from models.griddy_model import GriddyModel
 from griddy_solver import GriddySolver
 
@@ -24,6 +25,8 @@ FIXED_PARAMS = {
     "solver_class": GriddySolver,
     "optim_class": torch.optim.SGD,
     "loss_class": torch.nn.CrossEntropyLoss,
+    "train_data": None, # DataLoader
+    "test_data": None, # DataLoader
     "dtype": "float32",
     "warmup": 5,
     "epochs": 100,
