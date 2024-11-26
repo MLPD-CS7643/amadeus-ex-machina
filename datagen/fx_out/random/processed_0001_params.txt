@@ -1,7 +1,0 @@
-Input file: oct3_Fsus2_MuseScore_General.wav
-Effects chain: ['delay', 'chorus', 'noise', 'flanger']
-Parameters:
-delay: {'delay_time': 0.1, 'feedback': 0.3, 'mix': 0.4}
-chorus: {'rate': 0.9, 'depth': 0.4, 'delay_ms': 10.0, 'voices': 6, 'feedback': 0.2, 'mix': 0.6, 'lfo_shape': 'random'}
-noise: {'noise_type': 'brown', 'noise_level_db': -45, 'highpass_freq': 30, 'lowpass_freq': 2000, 'noise_gate_db': -65}
-flanger: {'rate': 4.0, 'depth': 0.8, 'delay_ms': 2.0, 'feedback': 0.6, 'mix': 1.0, 'lfo_shape': 'triangle'}

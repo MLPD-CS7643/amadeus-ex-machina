@@ -129,7 +129,7 @@ class NoiseGenerator:
             },
             'room_noise': {
                 'noise_type': 'brown',
-                'noise_level_db': -45,
+                'noise_level_db': -50,
                 'highpass_freq': 30,
                 'lowpass_freq': 2000,
                 'noise_gate_db': -65

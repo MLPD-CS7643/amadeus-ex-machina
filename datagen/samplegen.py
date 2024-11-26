@@ -38,9 +38,9 @@ def generate_sample(audio, sr, fx_chain, fx_params):
         elif fx == 'noise':
             n = Noise.NoiseGenerator(sr=sr)
             processed = n.add_noise(processed, **fx_params['noise'])
-        elif fx == 'flanger':
-            f = Flanger.Flanger(sr=sr)
-            processed = f.process(processed, **fx_params['flanger'])
+        #elif fx == 'flanger':
+            #f = Flanger.Flanger(sr=sr)
+            #processed = f.process(processed, **fx_params['flanger'])
             
     return processed
 
@@ -64,7 +64,7 @@ def generate_random_params(seed=None):
     dist = Distortion.Distortion()
     c = Chorus.Chorus()
     n = Noise.NoiseGenerator()
-    f = Flanger.Flanger()
+    #f = Flanger.Flanger()
     
     # Get all available effects and their presets
     fx_presets = {
@@ -72,8 +72,8 @@ def generate_random_params(seed=None):
         'delay': d.get_presets(),
         'distortion': dist.get_presets(),
         'chorus': c.get_presets(),
-        'noise': n.get_presets(),
-        'flanger': f.get_presets()
+        'noise': n.get_presets()
+        #'flanger': f.get_presets()
     }
     
     # Randomly select which effects to use (85% chance for each)
@@ -134,12 +134,14 @@ def generate_samples(input_path, output_path, num_samples, seed=None):
         processed = generate_sample(audio, sr, fx_chain, fx_params)
         
         # Save processed audio
-        output_filename = f"processed_{samples_generated:04d}.wav"
+        filename = input_file.replace(".wav", "")
+        filechain = str(fx_chain).replace("[", "").replace("]", "").replace("'", "").replace(",", "").replace(" ", "_")
+        output_filename = f"{filename}_{filechain}.wav"
         output_file_path = os.path.join(output_path, output_filename)
         sf.write(output_file_path, processed, sr)
         
         # Save parameters for reproducibility
-        params_filename = f"processed_{samples_generated:04d}_params.txt"
+        params_filename = f"{filename}_{filechain}_params.txt"
         params_path = os.path.join(output_path, params_filename)
         with open(params_path, 'w') as f:
             f.write(f"Input file: {input_file}\n")
@@ -154,7 +156,7 @@ def main():
     INPUT_PATH = "./wav_out/"
     OUTPUT_PATH = "./fx_out/random"
     NUM_SAMPLES = 5
-    SEED = 42  # Change this for different random sequences
+    SEED = 69  # Change this for different random sequences
 
     os.makedirs(OUTPUT_PATH, exist_ok=True)
     

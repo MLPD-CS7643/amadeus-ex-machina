@@ -21,7 +21,7 @@ class Distortion:
         self._prev_gain = 1.0
         self._prev_envelope = 0.0
     
-    def distort(self, y, gain=3.0, threshold=0.5, mix=1.0, mode='soft'):
+    def distort(self, y, gain=3.0, threshold=0.5, mix=5.0, mode='soft'):
         """
         Apply distortion effect to an audio signal with options for soft or hard clipping.
         
@@ -41,7 +41,7 @@ class Distortion:
             y = y / np.max(np.abs(y))
         
         # Apply input gain
-        gain = linear_to_db(gain)
+        gain = db_to_linear(gain)
         amplified = y * gain
         
         # Initialize output array
@@ -89,19 +89,19 @@ class Distortion:
             'warm_overdrive': {
                 'gain': 4.0,
                 'threshold': 0.6,
-                'mix': 0.4,
+                'mix': 0.35,
                 'mode': 'soft'
             },
             'classic_distortion': {
                 'gain': 8.0,
                 'threshold': 0.4,
-                'mix': 0.5,
+                'mix': 0.4,
                 'mode': 'hard'
             },
             'fuzz': {
                 'gain': 12.0,
                 'threshold': 0.3,
-                'mix': 0.5,
+                'mix': 0.4,
                 'mode': 'hard'
             }
         }

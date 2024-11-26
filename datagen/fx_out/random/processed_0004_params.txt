@@ -1,9 +1,0 @@
-Input file: oct2_Fmin_MuseScore_General.wav
-Effects chain: ['delay', 'distortion', 'chorus', 'reverb', 'flanger', 'noise']
-Parameters:
-reverb: {'room_size': 0.5, 'decay': 0.5, 'damping': 0.7, 'diffusion': 0.7, 'early_reflections': False, 'pre_delay': 0.02}
-delay: {'delay_time': 0.1, 'feedback': 0.3, 'mix': 0.4}
-distortion: {'gain': 2.0, 'threshold': 0.7, 'mix': 0.3, 'mode': 'soft'}
-chorus: {'rate': 0.8, 'depth': 0.3, 'delay_ms': 12.0, 'voices': 3, 'feedback': 0.2, 'mix': 0.5, 'lfo_shape': 'sine'}
-noise: {'noise_type': 'brown', 'noise_level_db': -45, 'highpass_freq': 30, 'lowpass_freq': 2000, 'noise_gate_db': -65}
-flanger: {'rate': 4.0, 'depth': 0.8, 'delay_ms': 2.0, 'feedback': 0.6, 'mix': 1.0, 'lfo_shape': 'triangle'}

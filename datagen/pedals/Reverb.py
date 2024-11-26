@@ -68,7 +68,7 @@ class Reverb:
         ir = ir / np.max(np.abs(ir))
         self.ir = ir
 
-    def reverb(self, y, mix=0.3, room_size=0.8, decay=0.5, damping=0.5,
+    def reverb(self, y, mix=0.25, room_size=0.8, decay=0.5, damping=0.5,
                 diffusion=0.5, early_reflections=True, pre_delay=0.02):
           """
           Apply reverb effect to audio.
