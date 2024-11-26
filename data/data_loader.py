@@ -118,16 +118,16 @@ class BillboardDataProcessor:
 
         return X_train, X_test, y_train, y_test
 
-    def build_data_loaders(self):
+    def build_data_loaders(self, device="mps"):
         """Creates data loaders from the preprocessed model data."""
         X_train, X_test, y_train, y_test = self.prepare_model_data()
 
         # Convert to PyTorch tensors
-        X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
-        y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+        X_train_tensor = torch.tensor(X_train, dtype=torch.float32, device=device)
+        y_train_tensor = torch.tensor(y_train, dtype=torch.long, device=device)
 
-        X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
-        y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+        X_test_tensor = torch.tensor(X_test, dtype=torch.float32, device=device)
+        y_test_tensor = torch.tensor(y_test, dtype=torch.long, device=device)
 
         # Create datasets
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
@@ -135,9 +135,9 @@ class BillboardDataProcessor:
 
         # Create data loaders
         train_loader = DataLoader(
-            train_dataset, batch_size=self.batch_size, shuffle=True
+            train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
         )
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
 
         return train_loader, test_loader
 
