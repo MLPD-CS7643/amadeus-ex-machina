@@ -54,20 +54,21 @@ SGD_PARAMS = {
 PARAM_RANGES = MODEL_PARAMS | SGD_PARAMS
 
 
-def hit_griddy(param_ranges, fixed_params, n_jobs):
+def hit_griddy(param_ranges, fixed_params, out_dir, n_jobs):
     """
     I am addicted to hitting the griddy.
 
     Args:
         param_ranges (dict): params to grid search
         fixed_params (dict): params to not grid search (lame)
+        out_dir: (Path or str): folder to save output
         n_jobs (int): number of workers
 
     Returns:
         None
     """
-    if not os.path.exists(JSON_DIR):
-        os.makedirs(JSON_DIR)
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
 
     print("\"Hitting the griddy...\" -Ellie")
 
@@ -78,13 +79,13 @@ def hit_griddy(param_ranges, fixed_params, n_jobs):
 
     if n_jobs == 1:
         for params in permutations:
-            __griddy_iter(params, fixed_params)
+            __griddy_iter(params, fixed_params, out_dir)
     else:
-        Parallel(n_jobs=n_jobs)(delayed(__griddy_iter)(params, fixed_params) for params in permutations)
+        Parallel(n_jobs=n_jobs)(delayed(__griddy_iter)(params, fixed_params, out_dir) for params in permutations)
 
     print("DONE")
 
-def __griddy_iter(params, fixed_params):
+def __griddy_iter(params, fixed_params, out_dir):
 
     name = str(uuid.uuid1()).replace("-","")
 
@@ -97,7 +98,7 @@ def __griddy_iter(params, fixed_params):
     #model.half()
     torch.save(
         model.state_dict(),
-        f"./{BASE_DIR}/{__str_digits(score)}_{name}.pth",
+        f"./{out_dir}/{__str_digits(score)}_{name}.pth",
     )
 
     for key in fixed_params.keys():
@@ -114,7 +115,7 @@ def __griddy_iter(params, fixed_params):
         "params": params
     }
 
-    with open(f"{JSON_DIR}/{__str_digits(score)}_{name}.json", "w") as f:
+    with open(f"{out_dir}/{__str_digits(score)}_{name}.json", "w") as f:
         json.dump(out, f)
 
 def __model_size(model):
@@ -127,13 +128,13 @@ def __str_digits(num):
 
 ### NASTY PLOT ###
 
-def plot_from_json(json_folder=JSON_DIR, img_folder=IMG_DIR):
-    if not os.path.exists(img_folder):
-        os.makedirs(img_folder)
+def plot_from_json(json_dir, plot_dir):
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
 
-    for filename in os.listdir(json_folder):
+    for filename in os.listdir(json_dir):
         if filename.endswith('.json'):
-            file_path = os.path.join(json_folder, filename)
+            file_path = os.path.join(json_dir, filename)
             
             # Load the JSON file
             with open(file_path, 'r') as file:
@@ -146,14 +147,14 @@ def plot_from_json(json_folder=JSON_DIR, img_folder=IMG_DIR):
             #title = f"LR:{data['params']['learning_rate']}"
             #title = f"Reg: {data['params']['reg']}"
 
-            __plot_curves(train_history, valid_history, img_folder, filename, title)
+            __plot_curves(train_history, valid_history, plot_dir, filename, title)
 
-def json_to_csv(json_folder=JSON_DIR, csv_filename=CSV_FILENAME):
+def json_to_csv(json_dir, csv_path):
     results = []
     
-    for filename in os.listdir(json_folder):
+    for filename in os.listdir(json_dir):
         if filename.endswith('.json'):
-            file_path = os.path.join(json_folder, filename)
+            file_path = os.path.join(json_dir, filename)
             
             with open(file_path, 'r') as file:
                 data = json.load(file)
@@ -169,7 +170,7 @@ def json_to_csv(json_folder=JSON_DIR, csv_filename=CSV_FILENAME):
 
     results_df = pd.DataFrame(results)
 
-    results_df.to_csv(os.path.join(json_folder, csv_filename), index=False)
+    results_df.to_csv(csv_path, index=False)
 
 def __plot_curves(train_history, valid_history, img_folder, filename, title):
     plt.figure()
