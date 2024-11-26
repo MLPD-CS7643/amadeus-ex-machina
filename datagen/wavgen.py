@@ -9,7 +9,7 @@ MIDI_FILES_PATH = "./test_midi/"
 SOUNDFONTS_PATH = "./soundfonts/"
 OUTPUT_PATH = "./wav_out/"
 
-def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, preset_id=0, seconds_to_generate=2, sample_rate=44100, bit_depth=16):   
+def synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, preset_id=0, seconds_to_generate=3, sample_rate=44100, bit_depth=16):   
     # Initialize the synthesizer and load the soundfont
     synth = tsf.Synth(gain=-3)
     soundfont_id = synth.sfload(soundfont_path)

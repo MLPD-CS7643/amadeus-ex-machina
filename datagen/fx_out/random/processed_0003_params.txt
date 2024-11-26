@@ -1,0 +1,6 @@
+Input file: oct5_A5_MuseScore_General.wav
+Effects chain: ['chorus', 'reverb', 'delay']
+Parameters:
+reverb: {'room_size': 0.5, 'decay': 0.5, 'damping': 0.7, 'diffusion': 0.7, 'early_reflections': False, 'pre_delay': 0.02}
+delay: {'delay_time': 0.1, 'feedback': 0.3, 'mix': 0.4}
+chorus: {'rate': 0.5, 'depth': 0.2, 'delay_ms': 7.0, 'voices': 2, 'feedback': 0.1, 'mix': 0.3, 'lfo_shape': 'sine'}
