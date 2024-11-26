@@ -94,7 +94,7 @@ def __griddy_iter(params, fixed_params, out_dir):
 
     print(f"START: {name}\nPARAMS: {params}")
 
-    solver_class = fixed_params.pop("solver_class")
+    solver_class = params.pop("solver_class")
     solver = solver_class(**params)
     score, model, stop_epoch, train_history, valid_history, class_score = solver.train()
     print(f"END: {name} - SCORE: {__str_digits(score)}")
