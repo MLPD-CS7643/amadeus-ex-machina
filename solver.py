@@ -7,6 +7,7 @@ import torch.optim as optim
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from tqdm.notebook import tqdm  # For Jupyter notebooks
 
 from models.mlp_chord_classifier import MLPChordClassifier
 
@@ -127,7 +128,46 @@ class Solver:
             print(f"Epoch {epoch_idx + 1}")
             print("-----------------------------------")
 
-            train_loss, avg_train_loss, train_accuracy = self.train(train_loader)
+            # Set model to training mode
+            self.model.train()
+            total_loss = 0.0
+            total_correct = 0
+            total_samples = 0
+            
+            # Create progress bar for batches
+            progress_bar = tqdm(train_loader, desc=f'Training', leave=True)
+            
+            for inputs, labels in progress_bar:
+                inputs = inputs.to(self.device)
+                labels = labels.to(self.device)
+
+                self.optimizer.zero_grad()
+                outputs = self.model(inputs)
+                loss = self.criterion(outputs, labels)
+                loss.backward()
+                self.optimizer.step()
+
+                # Calculate batch statistics
+                _, predicted = torch.max(outputs, 1)
+                batch_correct = (predicted == labels).sum().item()
+                batch_accuracy = batch_correct / labels.size(0)
+                
+                # Update epoch statistics
+                total_loss += loss.item() * inputs.size(0)
+                total_correct += batch_correct
+                total_samples += labels.size(0)
+
+                # Update progress bar description
+                progress_bar.set_postfix({
+                    'loss': f'{loss.item():.4f}',
+                    'accuracy': f'{batch_accuracy:.4f}'
+                })
+
+            # Calculate epoch-level training metrics
+            avg_train_loss = total_loss / total_samples
+            train_accuracy = total_correct / total_samples
+
+            # Evaluate on validation set with progress bar
             val_loss, avg_val_loss, val_accuracy = self.evaluate(valid_loader)
 
             if self.scheduler:
