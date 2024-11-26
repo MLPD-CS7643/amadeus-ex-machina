@@ -1,0 +1,7 @@
+Input file: oct1_C#maj_MuseScore_General.wav
+Effects chain: ['reverb', 'noise', 'delay', 'distortion']
+Parameters:
+reverb: {'room_size': 0.5, 'decay': 0.5, 'damping': 0.7, 'diffusion': 0.7, 'early_reflections': False, 'pre_delay': 0.02}
+delay: {'delay_time': 0.5, 'feedback': 0.6, 'mix': 0.5}
+distortion: {'gain': 8.0, 'threshold': 0.4, 'mix': 0.5, 'mode': 'hard'}
+noise: {'noise_type': 'pink', 'noise_level_db': -50, 'highpass_freq': 1000, 'lowpass_freq': 16000, 'noise_gate_db': -50}

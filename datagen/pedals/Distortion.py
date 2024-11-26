@@ -89,19 +89,19 @@ class Distortion:
             'warm_overdrive': {
                 'gain': 4.0,
                 'threshold': 0.6,
-                'mix': 0.35,
+                'mix': 0.4,
                 'mode': 'soft'
             },
             'classic_distortion': {
                 'gain': 8.0,
                 'threshold': 0.4,
-                'mix': 0.4,
+                'mix': 0.5,
                 'mode': 'hard'
             },
             'fuzz': {
                 'gain': 12.0,
                 'threshold': 0.3,
-                'mix': 0.4,
+                'mix': 0.5,
                 'mode': 'hard'
             }
         }

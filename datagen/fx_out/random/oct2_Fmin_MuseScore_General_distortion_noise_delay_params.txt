@@ -1,0 +1,6 @@
+Input file: oct2_Fmin_MuseScore_General.wav
+Effects chain: ['distortion', 'noise', 'delay']
+Parameters:
+delay: {'delay_time': 0.4, 'feedback': 0.7, 'mix': 0.6}
+distortion: {'gain': 4.0, 'threshold': 0.6, 'mix': 0.4, 'mode': 'soft'}
+noise: {'noise_type': 'white', 'noise_level_db': -60, 'highpass_freq': 2000, 'lowpass_freq': 15000, 'noise_gate_db': -55}

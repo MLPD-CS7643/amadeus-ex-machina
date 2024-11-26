@@ -5,7 +5,8 @@ from scipy.signal import lfilter, butter
 import soundfile as sf
 import os
 import random
-from pedals import Delay, Distortion, Reverb, Chorus, Noise, Flanger
+from pedals import Delay, Distortion, Reverb, Chorus, Noise, Flanger, Compressor
+from pedals.Normalizer import analyze_audio_level, limit_audio, process_dynamics
 
 def generate_sample(audio, sr, fx_chain, fx_params):
     """
@@ -38,9 +39,52 @@ def generate_sample(audio, sr, fx_chain, fx_params):
         elif fx == 'noise':
             n = Noise.NoiseGenerator(sr=sr)
             processed = n.add_noise(processed, **fx_params['noise'])
+        #elif fx == 'compressor':
+            #c = Compressor.Compressor(sr=sr)
+            #processed = c.process(processed, **fx_params['compressor'])
         #elif fx == 'flanger':
             #f = Flanger.Flanger(sr=sr)
             #processed = f.process(processed, **fx_params['flanger'])
+        # Apply limiter after each effect
+        processed = limit_audio(processed, threshold_db=-1.0)
+
+    final_stats = analyze_audio_level(processed)
+    if final_stats['rms_db'] < -26:
+        processed = process_dynamics(
+            processed,
+            threshold_db=-35,
+            ratio=1.5,
+            attack_ms=20,
+            release_ms=150,
+            knee_db=6.0,
+            makeup_gain_db=4,
+            mode='upward'
+        )
+    elif final_stats['rms_db'] < -18:
+        processed = process_dynamics(
+            processed,
+            threshold_db=-30,
+            ratio=1.5,
+            attack_ms=20,
+            release_ms=150,
+            knee_db=6.0,
+            makeup_gain_db=2.5,
+            mode='upward'
+        )
+    elif final_stats['rms_db'] < -9:
+        processed = process_dynamics(
+            processed,
+            threshold_db=-20,
+            ratio=1.5,
+            attack_ms=20,
+            release_ms=150,
+            knee_db=6.0,
+            makeup_gain_db=1.5,
+            mode='upward'
+        )
+    
+    # Final limiting stage
+    processed = limit_audio(processed, threshold_db=-1.0)
             
     return processed
 
@@ -64,6 +108,7 @@ def generate_random_params(seed=None):
     dist = Distortion.Distortion()
     c = Chorus.Chorus()
     n = Noise.NoiseGenerator()
+    #c = Compressor.Compressor()
     #f = Flanger.Flanger()
     
     # Get all available effects and their presets
@@ -73,6 +118,7 @@ def generate_random_params(seed=None):
         'distortion': dist.get_presets(),
         'chorus': c.get_presets(),
         'noise': n.get_presets()
+        # 'compressor': c.get_presets(),
         #'flanger': f.get_presets()
     }
     
@@ -155,8 +201,8 @@ def generate_samples(input_path, output_path, num_samples, seed=None):
 def main():
     INPUT_PATH = "./wav_out/"
     OUTPUT_PATH = "./fx_out/random"
-    NUM_SAMPLES = 5
-    SEED = 69  # Change this for different random sequences
+    NUM_SAMPLES = 10
+    SEED = 7436  # Change this for different random sequences
 
     os.makedirs(OUTPUT_PATH, exist_ok=True)
     
