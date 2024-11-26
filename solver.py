@@ -44,6 +44,7 @@ class Solver:
                 case _:
                     # Default to MLPChordClassifier
                     self.model = MLPChordClassifier(**self.model_kwargs)
+            self.model.to(self.device)
 
         if optimizer:
             self.optimizer = optimizer
