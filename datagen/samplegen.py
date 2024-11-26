@@ -57,7 +57,7 @@ def generate_sample(audio, sr, fx_chain, fx_params):
             attack_ms=20,
             release_ms=150,
             knee_db=6.0,
-            makeup_gain_db=4,
+            makeup_gain_db=6,
             mode='upward'
         )
     elif final_stats['rms_db'] < -18:
@@ -68,7 +68,7 @@ def generate_sample(audio, sr, fx_chain, fx_params):
             attack_ms=20,
             release_ms=150,
             knee_db=6.0,
-            makeup_gain_db=2.5,
+            makeup_gain_db=4.5,
             mode='upward'
         )
     elif final_stats['rms_db'] < -9:
@@ -79,7 +79,7 @@ def generate_sample(audio, sr, fx_chain, fx_params):
             attack_ms=20,
             release_ms=150,
             knee_db=6.0,
-            makeup_gain_db=1.5,
+            makeup_gain_db=3,
             mode='upward'
         )
     
