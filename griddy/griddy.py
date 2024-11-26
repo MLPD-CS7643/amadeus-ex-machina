@@ -11,13 +11,13 @@ import torch.utils
 from models.griddy_model import GriddyModel
 from griddy_solver import GriddySolver
 
+
 NJOBS = 8
 DEVICE = "cuda"
 BASE_DIR = Path("./griddy")
 JSON_DIR = BASE_DIR / "out"
 IMG_DIR = BASE_DIR / "plot"
 CSV_FILENAME = "griddy_table.csv"
-
 
 FIXED_PARAMS = {
     "device": DEVICE,
