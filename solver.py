@@ -231,43 +231,55 @@ class Solver:
         scaler,
         label_encoder,
         output_lab_path="output_annotations.lab",
-        hop_length=512,
-        sr=44100,
     ):
-        new_chromagram_df = pd.read_csv(chroma_csv_path, header=None)
-        new_features = new_chromagram_df.values
+        # Read CSV and drop the junk column
+        chroma_df = pd.read_csv(chroma_csv_path, header=None)
+        chroma_df = chroma_df.drop(chroma_df.columns[0], axis=1)
 
-        new_features_scaled = scaler.transform(new_features)
-        new_features_tensor = torch.tensor(new_features_scaled, dtype=torch.float32).to(
+        # Extract timestamps from the first column after dropping the junk column
+        timestamps = chroma_df.iloc[
+            :, 0
+        ].values
+
+        features = chroma_df.iloc[:, 1:].values
+
+        # Scale the features using the provided scaler
+        features_scaled = scaler.transform(features)
+
+        # Convert features to tensor and move to the appropriate device
+        features_tensor = torch.tensor(features_scaled, dtype=torch.float32).to(
             self.device
         )
 
         # Run inference
         self.model.eval()
         with torch.no_grad():
-            outputs = self.model(new_features_tensor)
+            outputs = self.model(features_tensor)
             _, predicted_classes = torch.max(outputs, 1)
 
         predicted_classes = predicted_classes.cpu().numpy()
         predicted_labels = label_encoder.inverse_transform(predicted_classes)
 
-        hop_duration = hop_length / sr  # Duration of each hop/frame
-        num_frames = new_features_scaled.shape[0]
-        timestamps = np.arange(num_frames) * hop_duration
+        # Use the timestamps from the data to construct annotations
+        annotations = []
+        for i in range(len(timestamps) - 1):
+            start_time = timestamps[i]
+            end_time = timestamps[i + 1]
+            chord_label = predicted_labels[i]
+            annotations.append((start_time, end_time, chord_label))
 
-        # Pair timestamps with predicted labels
-        annotations = list(zip(timestamps, predicted_labels))
+        # Averaging out distance between each timestamp to approximate frame timing
+        frame_duration = np.mean(np.diff(timestamps))
 
+        final_frame_start = timestamps[-1]
+        final_frame_end = final_frame_start + frame_duration
+        chord_label = predicted_labels[-1]
+        annotations.append((final_frame_start, final_frame_end, chord_label))
+
+        # Write annotations to the output lab file
         with open(output_lab_path, "w") as f:
-            for i in range(len(annotations) - 1):
-                start_time = annotations[i][0]
-                end_time = annotations[i + 1][0]
-                chord_label = annotations[i][1]
+            for annotation in annotations:
+                start_time, end_time, chord_label = annotation
                 f.write(f"{start_time:.4f} {end_time:.4f} {chord_label}\n")
-
-            start_time = annotations[-1][0]
-            end_time = start_time + hop_duration
-            chord_label = annotations[-1][1]
-            f.write(f"{start_time:.4f} {end_time:.4f} {chord_label}\n")
 
         print(f"Chord annotations saved to {output_lab_path}")

@@ -2,7 +2,7 @@ import torch.nn as nn
 
 
 class MLPChordClassifier(nn.Module):
-    def __init__(self, input_size, num_classes, device="mps"):
+    def __init__(self, input_size, num_classes, device="cuda"):
         super(MLPChordClassifier, self).__init__()
         self.network = nn.Sequential(
             # Initial feature extraction

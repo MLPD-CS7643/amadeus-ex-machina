@@ -118,7 +118,7 @@ class BillboardDataProcessor:
 
         return X_train, X_test, y_train, y_test
 
-    def build_data_loaders(self, device="mps"):
+    def build_data_loaders(self, device="cuda"):
         """Creates data loaders from the preprocessed model data."""
         X_train, X_test, y_train, y_test = self.prepare_model_data()
 
