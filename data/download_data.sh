@@ -1,3 +1,5 @@
+echo "Running script from $(pwd)"
+
 # Index file for song metadata / ID lookup
 curl -L -o raw/billboard_index.csv https://www.dropbox.com/sh/o0olz0uwl9z9stb/billboard-2.0-index.csv?dl=1
 
