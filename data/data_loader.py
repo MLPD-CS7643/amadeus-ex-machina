@@ -88,6 +88,7 @@ class BillboardDataProcessor:
 
     def prepare_model_data(self):
         """Prepares the data for training by loading the combined CSV and processing it."""
+        print("Loading the combined CSV file...")
         combined_csv_path = self.combined_csv_path
 
         # Load the combined data
@@ -95,51 +96,69 @@ class BillboardDataProcessor:
         data = combined_df.values
 
         # Separate features and labels
+        print("Separating features and labels...")
         features = data[:, :-1].astype(float)
         labels = data[:, -1].astype(str)
 
         # Fit scaler and label encoder
+        print("Scaling features using MinMaxScaler...")
         self.scaler = MinMaxScaler()
         features_scaled = self.scaler.fit_transform(features)
 
+        print("Encoding labels using LabelEncoder...")
         self.label_encoder = LabelEncoder()
         labels_encoded = self.label_encoder.fit_transform(labels)
 
         # Save scaler and label encoder for future use
+        print(f"Saving the scaler to {self.scaler_path}...")
         with open(self.scaler_path, "wb") as f:
             pickle.dump(self.scaler, f)
 
+        print(f"Saving the label encoder to {self.label_encoder_path}...")
         with open(self.label_encoder_path, "wb") as f:
             pickle.dump(self.label_encoder, f)
 
+        # Split data into training and testing sets
+        print("Splitting data into training and testing sets...")
         X_train, X_test, y_train, y_test = train_test_split(
             features_scaled, labels_encoded, test_size=0.2, random_state=42
         )
 
+        print("Data preparation complete.")
         return X_train, X_test, y_train, y_test
+
 
     def build_data_loaders(self):
         """Creates data loaders from the preprocessed model data."""
+        print("Preparing model data...")
         X_train, X_test, y_train, y_test = self.prepare_model_data()
 
+        # Determine the number of classes
+        num_classes = len(set(y_train))  # Unique labels in the training set
+        print(f"Number of classes determined: {num_classes}")
+
         # Convert to PyTorch tensors
+        print("Converting training and testing data to PyTorch tensors...")
         X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
         y_train_tensor = torch.tensor(y_train, dtype=torch.long)
-
         X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
         y_test_tensor = torch.tensor(y_test, dtype=torch.long)
 
         # Create datasets
+        print("Creating TensorDatasets for training and testing data...")
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
         test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
 
         # Create data loaders
+        print("Creating DataLoaders for training and testing datasets...")
         train_loader = DataLoader(
             train_dataset, batch_size=self.batch_size, shuffle=True
         )
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
 
-        return train_loader, test_loader
+        print("Data loaders are ready for training and testing.")
+        return train_loader, test_loader, num_classes
+
 
     @staticmethod
     def _get_song_metadata(fpath: str) -> dict:
