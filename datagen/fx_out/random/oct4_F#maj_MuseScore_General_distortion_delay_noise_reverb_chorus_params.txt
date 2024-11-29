@@ -1,0 +1,8 @@
+Input file: oct4_F#maj_MuseScore_General.wav
+Effects chain: ['distortion', 'delay', 'noise', 'reverb', 'chorus']
+Parameters:
+reverb: {'room_size': 0.3, 'decay': 0.3, 'damping': 0.5, 'diffusion': 0.5, 'early_reflections': True, 'pre_delay': 0.01}
+delay: {'delay_time': 0.5, 'feedback': 0.6, 'mix': 0.5}
+distortion: {'gain': 12.0, 'threshold': 0.3, 'mix': 0.5, 'mode': 'hard'}
+chorus: {'rate': 0.8, 'depth': 0.3, 'delay_ms': 12.0, 'voices': 3, 'feedback': 0.2, 'mix': 0.5, 'lfo_shape': 'sine'}
+noise: {'noise_type': 'white', 'noise_level_db': -60, 'highpass_freq': 2000, 'lowpass_freq': 15000, 'noise_gate_db': -55}
