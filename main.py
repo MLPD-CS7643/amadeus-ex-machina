@@ -1,6 +1,6 @@
 import sys
 
-from data.data_loader import BillboardDataProcessor
+from data.data_loader import MirDataProcessor
 from solver import Solver
 
 
@@ -9,7 +9,7 @@ if __name__ == "__main__":
     model_config = sys.argv[1]
     chroma_path = sys.argv[2]
 
-    data_processor = BillboardDataProcessor(batch_size=128)
+    data_processor = MirDataProcessor(batch_size=128)
 
     print("Processing data and building data loaders...")
     train_loader, test_loader = data_processor.build_data_loaders()
