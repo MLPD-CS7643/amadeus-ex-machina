@@ -45,6 +45,9 @@ MANIFEST
 # Soundfonts
 *.sf2
 
+# Models
+*.pth
+
 # Don't upload massive data files to git
 data/raw/
 data/processed/

@@ -32,15 +32,15 @@ class Solver:
         else:
             match self.model_type:
                 case "MLPChordClassifier":
-                    self.model = MLPChordClassifier(**self.model_kwargs)
+                    self.model = MLPChordClassifier(**self.model_kwargs).to(self.device)
                 case "CNNModel":
-                    self.model = CNNModel(**self.model_kwargs)
+                    self.model = CNNModel(**self.model_kwargs).to(self.device)
                 case "CRNNModel":
-                    self.model = CRNNModel(**self.model_kwargs)
+                    self.model = CRNNModel(**self.model_kwargs).to(self.device)
                 case "RNNModel":
-                    self.model = RNNModel(**self.model_kwargs)
+                    self.model = RNNModel(**self.model_kwargs).to(self.device)
                 case "GriddyModel":
-                    self.model = GriddyModel(**self.model_kwargs)
+                    self.model = GriddyModel(**self.model_kwargs).to(self.device)
                 case _:
                     # Default to MLPChordClassifier
                     self.model = MLPChordClassifier(**self.model_kwargs)
@@ -52,9 +52,9 @@ class Solver:
             self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
         if criterion:
-            self.criterion = criterion
+            self.criterion = criterion.to(self.device)
         else:
-            self.criterion = nn.CrossEntropyLoss()
+            self.criterion = nn.CrossEntropyLoss().to(self.device)
 
         if scheduler:
             self.scheduler = scheduler
