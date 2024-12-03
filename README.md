@@ -9,13 +9,8 @@ This repository includes utilities to preprocess audio data and prepare it for m
 
 ### Scripts and Usage
 
-### 1. **McGill Billboard Data Pull**
+The [MIR Data Library](https://mirdata.readthedocs.io/en/stable/) contains a number of useable datasets, with the primary one being the Billboard McGills Dataset. To begin using the data processing utilities, you need to initialize and download the desired dataset. Here's how you can do it:
 
-Within the `/data` directory, run `./download_data.sh` to pull down the publicly available audio dataset,
-which includes chord annotations in the form of LAB files and associated chromagrams stored in CSVs.
+1. **Initialize the Processor**: Create an instance of `MirDataProcessor`, specifying the dataset by name if you wish to use a dataset other than Billboard, and specify `download=True` to download the dataset.
 
-### 2. **Create Usable Model Data**
-
-In order to extract usable train/test data from the raw data, instantiate a `BillboardDataProcessor` and run `process_billboard_data`
-
-This will create a combined CSV of all song chromagrams and associated annotations.
+2. **Process the Data**: If you are using the Billboard McGills Dataset, you can process the data by calling the `process_data` method. This will create a combined CSV file in the `data/processed` directory containing all of the processed data.
