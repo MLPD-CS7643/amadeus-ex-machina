@@ -127,8 +127,7 @@ class BillboardDataProcessor:
         print("Data preparation complete.")
         return X_train, X_test, y_train, y_test
 
-
-    def build_data_loaders(self):
+    def build_data_loaders(self, device="cuda"):
         """Creates data loaders from the preprocessed model data."""
         print("Preparing model data...")
         X_train, X_test, y_train, y_test = self.prepare_model_data()
@@ -138,11 +137,11 @@ class BillboardDataProcessor:
         print(f"Number of classes determined: {num_classes}")
 
         # Convert to PyTorch tensors
-        print("Converting training and testing data to PyTorch tensors...")
-        X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
-        y_train_tensor = torch.tensor(y_train, dtype=torch.long)
-        X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
-        y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+        X_train_tensor = torch.tensor(X_train, dtype=torch.float32, device=device)
+        y_train_tensor = torch.tensor(y_train, dtype=torch.long, device=device)
+
+        X_test_tensor = torch.tensor(X_test, dtype=torch.float32, device=device)
+        y_test_tensor = torch.tensor(y_test, dtype=torch.long, device=device)
 
         # Create datasets
         print("Creating TensorDatasets for training and testing data...")
@@ -152,13 +151,11 @@ class BillboardDataProcessor:
         # Create data loaders
         print("Creating DataLoaders for training and testing datasets...")
         train_loader = DataLoader(
-            train_dataset, batch_size=self.batch_size, shuffle=True
+            train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
         )
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
 
-        print("Data loaders are ready for training and testing.")
-        return train_loader, test_loader, num_classes
-
+        return train_loader, test_loader
 
     @staticmethod
     def _get_song_metadata(fpath: str) -> dict:
