@@ -1,6 +1,0 @@
-Input file: oct3_Fsus2_MuseScore_General.wav
-Effects chain: ['distortion', 'chorus', 'delay']
-Parameters:
-delay: {'delay_time': 0.25, 'feedback': 0.5, 'mix': 0.5}
-distortion: {'gain': 4.0, 'threshold': 0.6, 'mix': 0.4, 'mode': 'soft'}
-chorus: {'rate': 0.3, 'depth': 0.5, 'delay_ms': 15.0, 'voices': 4, 'feedback': 0.3, 'mix': 0.7, 'lfo_shape': 'triangle'}
