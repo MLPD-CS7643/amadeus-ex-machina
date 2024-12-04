@@ -3,16 +3,16 @@ import json
 from pathlib import Path
 from mido import Message, MidiFile, MidiTrack
 from zipfile import ZipFile
-from datagen.wavgen import synthesize_to_wav
+from datagen.wavgen import wavgen
 from utils.gdrive import download_from_gdrive
-
 
 JSON_FILE = "chord_ref.json"
 SF2_ARCHIVE = "sf2.zip"
 
-BASE_DIR = "./chordgen"
-WAV_DIR = "wav"
-SF2_DIR = "sf2"
+thisdir = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(thisdir, "chordgen")
+WAV_DIR = os.path.join(BASE_DIR, "wav")
+SF2_DIR = os.path.join(BASE_DIR, "sf2")
 
 SAMPLE_RATE = 44100
 BIT_DEPTH = 16
@@ -79,7 +79,7 @@ def generate_all_chords(download_sf2:bool=False, start_octave:int=4, end_octave:
                     wav_filename = f"{mid_filename}_{sf_name}"
                     wav_filepath = wav_path / f"{wav_filename}.wav"
                     sf_filepath = sf2_path / f"{sf_name}.sf2"
-                    synthesize_to_wav(str(mid_filepath.absolute()), str(sf_filepath.absolute()), str(wav_filepath.absolute()), sample_rate=SAMPLE_RATE, bit_depth=BIT_DEPTH)
+                    wavgen.synthesize_to_wav(str(mid_filepath.absolute()), str(sf_filepath.absolute()), str(wav_filepath.absolute()), sample_rate=SAMPLE_RATE, bit_depth=BIT_DEPTH)
                     json_out[wav_filename] = {
                         "root": note_name,
                         "chord_class": chord_class,
