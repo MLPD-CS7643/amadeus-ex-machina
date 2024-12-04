@@ -1,9 +1,11 @@
 import os
 import json
+import wave
+import numpy as np
+import tinysoundfont as tsf
 from pathlib import Path
 from mido import Message, MidiFile, MidiTrack
 from zipfile import ZipFile
-from datagen.wavgen import synthesize_to_wav
 from utils.gdrive import download_from_gdrive
 
 
@@ -79,7 +81,7 @@ def generate_all_chords(download_sf2:bool=False, start_octave:int=4, end_octave:
                     wav_filename = f"{mid_filename}_{sf_name}"
                     wav_filepath = wav_path / f"{wav_filename}.wav"
                     sf_filepath = sf2_path / f"{sf_name}.sf2"
-                    synthesize_to_wav(str(mid_filepath.absolute()), str(sf_filepath.absolute()), str(wav_filepath.absolute()), sample_rate=SAMPLE_RATE, bit_depth=BIT_DEPTH)
+                    __synthesize_to_wav(str(mid_filepath.absolute()), str(sf_filepath.absolute()), str(wav_filepath.absolute()), sample_rate=SAMPLE_RATE, bit_depth=BIT_DEPTH)
                     json_out[wav_filename] = {
                         "root": note_name,
                         "chord_class": chord_class,
@@ -129,3 +131,47 @@ def __fetch_sf2_archive(path:Path):
     with ZipFile(dl_path, 'r') as zf:
         zf.extractall(path)
     os.remove(dl_path)
+
+def __synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, preset_id=0, seconds_to_generate=3, sample_rate=44100, bit_depth=16):   
+    # Initialize the synthesizer and load the soundfont
+    synth = tsf.Synth(gain=-3)
+    soundfont_id = synth.sfload(soundfont_path)
+    synth.program_select(instrument_id, soundfont_id, 0, preset_id)
+
+    # Start the synthesizer (assumes correct setup prior to this point)
+    synth.start()
+
+    # Load the MIDI file into the sequencer
+    seq = tsf.Sequencer(synth)
+    seq.midi_load(midi_path)
+
+    # Collect audio samples into a list
+    audio_samples = []
+    samples_per_chunk = 4096  # Number of samples per chunk
+    total_samples = sample_rate * seconds_to_generate  # Total samples to generate
+
+    # Generating and collecting audio samples
+    for _ in range(0, total_samples+1, samples_per_chunk):
+        buffer = synth.generate(samples_per_chunk)  # Generates and returns a memoryview
+        audio_data = np.frombuffer(buffer, dtype=np.float32).reshape(-1, 2)
+        audio_samples.append(audio_data)
+
+    # Concatenate all collected audio data
+    full_audio = np.concatenate(audio_samples)
+
+    if bit_depth == 16:
+        # Convert float32 to int16
+        int_audio = np.int16(full_audio * 32767)
+    else:
+        print(f"Unsupported bit depth of {bit_depth}")
+        return
+
+
+    # Save the synthesized audio to a WAV file
+    with wave.open(output_file, 'wb') as wf:
+        wf.setnchannels(2)  # Stereo
+        wf.setsampwidth(2)  # Bytes per sample, int16
+        wf.setframerate(sample_rate)  # Sample rate in Hz
+        wf.writeframes(int_audio.tobytes())
+
+    synth.stop()
