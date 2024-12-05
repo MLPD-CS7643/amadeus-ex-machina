@@ -4,7 +4,11 @@ from scipy.signal import convolve
 from scipy.signal import lfilter, butter
 import soundfile as sf
 import os
-from pedals import Compressor, Delay, Distortion, Reverb, Chorus, Noise, Flanger
+#from pedals 
+import Compressor, Delay, Distortion, Reverb, Chorus, Noise, Flanger
+
+#THIS IS JUST A TESTFILE
+#DO NOT IMPORT FROM HERE
 
 INPUT_PATH = "./wav_out/"
 OUTPUT_PATH = "./fx_out/"

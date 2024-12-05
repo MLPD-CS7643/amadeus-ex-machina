@@ -1,6 +1,0 @@
-Input file: oct3_Fsus2_MuseScore_General.wav
-Effects chain: ['reverb', 'chorus', 'distortion']
-Parameters:
-reverb: {'room_size': 1.0, 'decay': 0.9, 'damping': 0.3, 'diffusion': 0.8, 'early_reflections': True, 'pre_delay': 0.1}
-distortion: {'gain': 2.0, 'threshold': 0.7, 'mix': 0.3, 'mode': 'soft'}
-chorus: {'rate': 0.3, 'depth': 0.5, 'delay_ms': 15.0, 'voices': 4, 'feedback': 0.3, 'mix': 0.7, 'lfo_shape': 'triangle'}

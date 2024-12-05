@@ -199,8 +199,9 @@ def generate_samples(input_path, output_path, num_samples, seed=None):
         samples_generated += 1
         
 def main():
-    INPUT_PATH = "./wav_out/"
-    OUTPUT_PATH = "./fx_out/random"
+    thisdir = os.path.dirname(os.path.abspath(__file__))
+    INPUT_PATH = os.path.join(thisdir, "wav_out")
+    OUTPUT_PATH = os.path.join(thisdir, "fx_out/random")
     NUM_SAMPLES = 10
     SEED = 7436  # Change this for different random sequences
 

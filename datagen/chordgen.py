@@ -8,13 +8,13 @@ from mido import Message, MidiFile, MidiTrack
 from zipfile import ZipFile
 from utils.gdrive import download_from_gdrive
 
-
 JSON_FILE = "chord_ref.json"
 SF2_ARCHIVE = "sf2.zip"
 
-BASE_DIR = "./chordgen"
-WAV_DIR = "wav"
-SF2_DIR = "sf2"
+thisdir = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(thisdir, "chordgen")
+WAV_DIR = os.path.join(BASE_DIR, "wav")
+SF2_DIR = os.path.join(BASE_DIR, "sf2")
 
 SAMPLE_RATE = 44100
 BIT_DEPTH = 16

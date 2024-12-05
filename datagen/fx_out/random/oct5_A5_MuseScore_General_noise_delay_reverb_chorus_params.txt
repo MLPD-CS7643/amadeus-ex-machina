@@ -1,7 +1,0 @@
-Input file: oct5_A5_MuseScore_General.wav
-Effects chain: ['noise', 'delay', 'reverb', 'chorus']
-Parameters:
-reverb: {'room_size': 0.3, 'decay': 0.3, 'damping': 0.5, 'diffusion': 0.5, 'early_reflections': True, 'pre_delay': 0.01}
-delay: {'delay_time': 0.25, 'feedback': 0.5, 'mix': 0.5}
-chorus: {'rate': 0.5, 'depth': 0.2, 'delay_ms': 7.0, 'voices': 2, 'feedback': 0.1, 'mix': 0.3, 'lfo_shape': 'sine'}
-noise: {'noise_type': 'pink', 'noise_level_db': -50, 'highpass_freq': 1000, 'lowpass_freq': 16000, 'noise_gate_db': -50}
