@@ -6,38 +6,54 @@ A Python-based pipeline for generating synthetic chord audio samples used in dee
 
 The pipeline consists of three main components:
 
-- `chordgen.py`: Generates MIDI files for various chord types across octaves
-- `wavgen.py`: Converts MIDI files to WAV using SoundFont synthesis
-- `pedal_board.py`: Applies audio effects for data augmentation
+- `chordgen.py`: Defines chord classes and generates .wav files using library of .sf2 soundfonts
+- `fxgen.py`: Applies audio effects to base .wav files for data augmentation
+- `pedal_board.py`: Defines and implements the effects used by fxgen.py
 
 ## Getting Started
 
-1. Install dependencies:
-```bash
-pip install mido librosa numpy scipy soundfile tinysoundfont #TODO: upgrade to a requirements.txt
-```
+### Chordgen
 
-2. Set up directory structure:
-```bash
-mkdir -p ./chordgen/{wav,sf2} #Does this work automatically if they don't exist?
-mkdir -p ./fx_out/{reverb,delay,distort,compress,chorus}
-```
+1. Make sure your environment packages are up to date with the ones defined in `environment.yaml`
 
-3. Download SoundFonts by running:
-```python
-from datagen.chordgen import generate_all_chords
-generate_all_chords(download_sf2=True)
-```
+2. Choose an output folder, you can set `make_dir=True` when calling `generate_all_chords` to create the folder but you must be aware of your working directory location
+    - You may want to pass an absolute path to `out_dir` to be safe
 
-4. Generate chord samples:
-```python
-# Generate chords for octaves 3-5
-generate_all_chords(start_octave=2, end_octave=4) #reccomend using no lower than 1 and no higher than 5
-```
+3. Import to your notebook using `from datagen.chordgen import generate_all_chords`
 
-5. Apply effects:
-Currently, to apply effects please use samplegen.py. Some fx are excluded from the pipeline and some parameters will result in not so great results. 
-Samplegen uses a bank of presets to randomly select parameter and effect combinations from the list of working effeccts to create random processing chains for each chord input.  
+4. If this is your first time running, you will need to download the soundfonts by setting `download_sf2=True` when calling `generate_all_chords`
+    - For this to work, your `{project_root}/secrets/gdrive.json` file must be present and up to date (see `#links-only` channel)
+    - .sf2 files will be saved to `{out_dir}/sf2/`
+    - Set `download_sf2=False` afterwards
+
+5. Call `generate_all_chords` 
+    - Example: `generate_all_chords(out_dir="/data/audio/chords", download_sf2=True)`
+    - By default chords are generated only for the 4th octave - this can be configured with the `start_octave` and `end_octave` params (recommend no lower than 1 and no higher than 6)
+    - Audio will be saved to `{out_dir}/wav/` with `chord_ref.json` lookup table saved to `{out_dir}/`
+
+6. Load `chord_ref.json` output to use as reference for generating your dataset
+    - keyed with unique id for each chord
+    - Example of how you might want to use it:
+    ```python
+    chord_table = json.loads(f"{out_dir}/chord_ref.json")
+    for key, obj in chord_table.items():
+      # ex key: Cmaj7_O4_piano
+      billboard_chord = obj["billboard_notation"] # ex: C:maj7
+      #do something with ground truth
+      filename = obj["filename"] #: ex Cmaj7_O4_piano.wav
+      fileformat = obj["format"] # ex: wav
+      path_to_audio_file = out_dir / fileformat / filename # using Pathlib notation
+      audio = your_audio_loader.load(path_to_audio_file)
+      # do something with audio
+    ```
+    - other useful subkeys: `root` `chord_class` `octave` `instrument`
+
+
+### FXGen
+
+- NOTE: Effects integration WIP, recommend use chords for now
+- Currently, to apply effects please use `fxgen.py`. Some fx are excluded from the pipeline and some parameters will result in not so great results. 
+- fxgen uses a bank of presets to randomly select parameter and effect combinations from the list of working effects to create random processing chains for each chord input.  
 
 ## Technical Details
 
