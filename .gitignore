@@ -45,6 +45,9 @@ MANIFEST
 # Soundfonts
 *.sf2
 
+# Metadata
+datagen/fx_out/*/*.txt
+
 # Models
 *.pth
 
