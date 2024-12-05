@@ -8,7 +8,7 @@ import random
 from pedals import Delay, Distortion, Reverb, Chorus, Noise, Flanger, Compressor
 from pedals.Normalizer import analyze_audio_level, limit_audio, process_dynamics
 
-def generate_sample(audio, sr, fx_chain, fx_params):
+def process_sample(audio, sr, fx_chain, fx_params):
     """
     Process a single audio sample with a random chain of effects.
     
@@ -142,7 +142,7 @@ def generate_random_params(seed=None):
     
     return fx_chain, fx_params
 
-def generate_samples(input_path, output_path, num_samples, seed=None):
+def batch_process_samples(input_path, output_path, num_samples, seed=None):
     """
     Generate multiple processed samples from input audio files.
     
@@ -177,7 +177,7 @@ def generate_samples(input_path, output_path, num_samples, seed=None):
         fx_chain, fx_params = generate_random_params(current_seed)
         
         # Process audio
-        processed = generate_sample(audio, sr, fx_chain, fx_params)
+        processed = process_sample(audio, sr, fx_chain, fx_params)
         
         # Save processed audio
         filename = input_file.replace(".wav", "")
@@ -207,7 +207,7 @@ def main():
 
     os.makedirs(OUTPUT_PATH, exist_ok=True)
     
-    generate_samples(INPUT_PATH, OUTPUT_PATH, NUM_SAMPLES, SEED)
+    batch_process_samples(INPUT_PATH, OUTPUT_PATH, NUM_SAMPLES, SEED)
 
 if __name__ == "__main__":
     main()
