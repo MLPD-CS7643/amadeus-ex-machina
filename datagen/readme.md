@@ -16,10 +16,10 @@ The pipeline consists of three main components:
 
 1. Make sure your environment packages are up to date with the ones defined in `environment.yaml`
 
-2. Choose an output folder, you can set `make_dir=True` when calling `generate_all_chords` to create the folder but you must be aware of your working directory location
-    - You may want to pass an absolute path to `out_dir` to be safe
+2. Import to your notebook using `from datagen.chordgen import generate_all_chords`
 
-3. Import to your notebook using `from datagen.chordgen import generate_all_chords`
+3. Choose an output folder, you can set `make_dir=True` when calling `generate_all_chords` to create the folder but you must be aware of your working directory location
+    - You may want to pass an absolute path to `out_dir` to be safe
 
 4. If this is your first time running, you will need to download the soundfonts by setting `download_sf2=True` when calling `generate_all_chords`
     - For this to work, your `{project_root}/secrets/gdrive.json` file must be present and up to date (see `#links-only` channel)
