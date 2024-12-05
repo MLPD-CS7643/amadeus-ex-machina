@@ -14,10 +14,13 @@ dependencies:
   - pandas
   - scipy
   - scikit-learn
+  - joblib
+  - tqdm
   - pip
   - pip:
+      - torchaudio
       - librosa
       - jams
       - mido
-      - tinysoundfont
       - gdown
+      - tinysoundfont

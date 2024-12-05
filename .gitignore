@@ -48,6 +48,9 @@ MANIFEST
 # Metadata
 datagen/fx_out/*/*.txt
 
+# Models
+*.pth
+
 # Don't upload massive data files to git
 data/raw/
 data/processed/
