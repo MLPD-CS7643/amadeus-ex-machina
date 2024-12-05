@@ -1,9 +1,13 @@
 from pathlib import Path
 import pickle
+import os
+import requests
+import tarfile
+import yt_dlp
 
 import pandas as pd
-import mirdata
 import mir_eval
+import mirdata
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
@@ -173,3 +177,110 @@ class MirDataProcessor:
             for _, row in valid_data.iterrows()
         }
         return song_metadata
+
+def download_and_extract(url, download_path, extract_to):
+    """
+    Download a tar.xz file from a URL and extract its contents.
+
+    Args:
+        url (str): The URL of the file to download.
+        download_path (str): The local path to save the downloaded file.
+        extract_to (str): The directory where the contents should be extracted.
+    """
+    try:
+        # Download the file
+        print(f"Downloading from {url}...")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+
+        with open(download_path, 'wb') as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+        print(f"Downloaded file saved to {download_path}.")
+
+        # Extract the tar.xz file
+        print(f"Extracting {download_path} to {extract_to}...")
+        with tarfile.open(download_path, "r:xz") as tar:
+            tar.extractall(path=extract_to)
+        print(f"Extraction complete! Files extracted to {extract_to}")
+
+        # Optional: Remove the downloaded tar.xz file to save space
+        os.remove(download_path)
+        print(f"Removed the downloaded file: {download_path}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred during download: {e}")
+    except (tarfile.TarError, Exception) as e:
+        print(f"An error occurred during extraction: {e}")
+
+def parse_lab_file(lab_file_path):
+    """
+    Parse a .lab file to extract the title and artist.
+    """
+    title = artist = None
+    with open(lab_file_path, 'r') as file:
+        for line in file:
+            if line.startswith("# title:"):
+                title = line.split(":", 1)[1].strip()
+            elif line.startswith("# artist:"):
+                artist = line.split(":", 1)[1].strip()
+            if title and artist:
+                break
+    return title, artist
+
+def download_audio_from_youtube(query, output_path):
+    """
+    Search for a song on YouTube and download its audio as an MP3 file.
+    """
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'quiet': True,
+        'outtmpl': output_path,
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            search_results = ydl.extract_info(f"ytsearch:{query}", download=False)
+            if 'entries' in search_results and search_results['entries']:
+                video_url = search_results['entries'][0]['url']
+                ydl.download([video_url])
+                print(f"Downloaded audio as {output_path}")
+                return output_path
+            else:
+                print("No results found on YouTube.")
+                return None
+    except Exception as e:
+        print(f"An error occurred during YouTube download: {e}")
+        return None
+
+def process_lab_files(base_directory):
+    """
+    Traverse through folders in the base directory, process .lab files, and download audio.
+    """
+    for root, dirs, files in os.walk(base_directory):
+        for file in files:
+            if file.endswith(".txt"):
+                lab_file_path = os.path.join(root, file)
+                print(f"Processing lab file: {lab_file_path}")
+
+                # Parse the lab file for song title and artist
+                title, artist = parse_lab_file(lab_file_path)
+                if not title or not artist:
+                    print(f"Skipping {lab_file_path}: Missing title or artist")
+                    continue
+
+                # Generate a YouTube query and output path for MP3
+                query = f"{title} {artist}"
+                output_mp3_path = os.path.join(root, f"{title} - {artist}.mp3")
+
+                # Skip if the file already exists
+                if os.path.exists(output_mp3_path):
+                    print(f"File already exists: {output_mp3_path}")
+                    continue
+
+                # Download the audio from YouTube
+                download_audio_from_youtube(query, output_mp3_path)
