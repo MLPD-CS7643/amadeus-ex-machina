@@ -1,5 +1,7 @@
 import yaml
+import copy
 import torch
+import optuna
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -37,6 +39,8 @@ class Solver:
         self.base_lr = optimizer.param_groups[0]['lr']
         self.train_accuracy_history = []
         self.valid_accuracy_history = []
+
+        self.best_model = None
 
     @classmethod
     def from_yaml(cls, cfg_path: str, **dynamic_kwargs):
@@ -78,11 +82,12 @@ class Solver:
 
         return total_loss, avg_loss, accuracy
     
-    def train_and_evaluate(self, plot_results=False):
+    def train_and_evaluate(self, trial=None, plot_results=False):
         train_loader = self.train_dataloader
         valid_loader = self.valid_dataloader
 
         no_improve = 0
+        best_loss = float('inf')
         best_val_accuracy = 0
         for epoch_idx in range(self.epochs):
             print("-----------------------------------")
@@ -137,14 +142,12 @@ class Solver:
                 self.scheduler.step(avg_val_loss)
 
             if val_accuracy > best_val_accuracy:
-                no_improve = 0
                 best_val_accuracy = val_accuracy
+                self.best_model = copy.deepcopy(self.model)
                 torch.save(
                     self.model.state_dict(),
                     f"{Path(__file__).parent}/models/checkpoints/{self.model.__class__.__name__}_best_model.pth",
                 )
-            else:
-                no_improve += 1
 
             self.train_accuracy_history.append(train_accuracy)
             self.valid_accuracy_history.append(val_accuracy)
@@ -156,12 +159,31 @@ class Solver:
                 f"Training Accuracy: {train_accuracy:.4f}. Validation Accuracy: {val_accuracy:.4f}."
             )
 
-            if self.early_stop_epochs > 0 and no_improve >= self.early_stop_epochs:
-                print("EARLY STOP E:{} L:{:.4f}".format(epoch_idx+1, val_accuracy))
-                break
+            # Optuna injection
+            if trial:
+                trial.report(val_loss, epoch_idx+1)
+                trial.set_user_attr(f'train_loss_epoch_{epoch_idx+1}', avg_train_loss)
+                trial.set_user_attr(f'val_loss_epoch_{epoch_idx+1}', avg_val_loss)
+                trial.set_user_attr(f'train_acc_epoch_{epoch_idx+1}', train_accuracy)
+                trial.set_user_attr(f'val_acc_epoch_{epoch_idx+1}', val_accuracy)
+                if trial.should_prune():
+                    print("OPTUNA PRUNED E:{} L:{:.4f}".format(epoch_idx+1, avg_val_loss))
+                    raise optuna.exceptions.TrialPruned()
+            
+            if self.early_stop_epochs > 0:
+                if val_loss < best_loss:
+                    best_loss = val_loss
+                    no_improve = 0
+                else:
+                    no_improve += 1
+                    if no_improve >= self.early_stop_epochs:
+                        print("EARLY STOP E:{} L:{:.4f}".format(epoch_idx+1, avg_val_loss))
+                        break
 
         if plot_results:
             self.plot_curves(f"{self.model.__class__.__name__}_accuracy_curve")
+
+        return best_val_accuracy
 
     def __lr_warmup(self, epoch):
         """Adjusts the learning rate according to the epoch during the warmup phase."""

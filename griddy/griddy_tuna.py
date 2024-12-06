@@ -5,6 +5,7 @@ import optuna
 import torch.utils
 from collections.abc import Iterable
 from models.griddy_model import GriddyModel
+from pathlib import Path
 from solver import Solver
 from enum import Enum, auto
 
@@ -106,20 +107,23 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, resume):
     storage_path = f'sqlite:///{full_path}'
 
     study = optuna.create_study(study_name=study_name, direction=__get_direction(param_set), storage=storage_path, load_if_exists=resume)
-    objective = __create_objective(param_set)
+    objective = __create_objective(param_set, out_dir)
     study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
 
     print("DONE")
 
-def __create_objective(param_set):
+def __create_objective(param_set, save_dir):
     # optuna objective function
     def objective(trial):
         model = __instantiate_class_with_trial_params(trial, 'model', param_set)
         optimizer = __instantiate_class_with_trial_params(trial, 'optim', param_set)
         scheduler = __instantiate_class_with_trial_params(trial, 'sched', param_set, pass_through_kwargs={'optimizer': optimizer})
         criterion = __instantiate_class_with_trial_params(trial, 'criterion', param_set)
-        solver = __instantiate_class_with_trial_params(trial, 'solver', param_set, enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion})
-        return solver.train()
+        solver:Solver = __instantiate_class_with_trial_params(trial, 'solver', param_set, enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion})
+        best_metric = solver.train_and_evaluate(trial)
+        if trial.study.best_trial.number == trial.number:
+            torch.save(solver.best_model, Path(save_dir) / f'{solver.best_model.__class__.__name__}_best_model.pth')
+        return best_metric
     return objective
 
 def __instantiate_class_with_trial_params(trial, class_group, param_set, pass_through_kwargs = {}, enforce_single_class=False):
