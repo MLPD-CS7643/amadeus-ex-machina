@@ -25,3 +25,6 @@ dependencies:
       - gdown
       - tinysoundfont
       - optuna
+      - mirdata
+      - yt_dlp
+      - mir_eval

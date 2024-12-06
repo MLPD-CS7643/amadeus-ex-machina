@@ -1,9 +1,9 @@
-import os
 from pathlib import Path
 import pickle
 
 import pandas as pd
-import jams
+import mir_eval
+import mirdata
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
@@ -11,78 +11,80 @@ from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 
 
-class BillboardDataProcessor:
-    def __init__(self, batch_size=64):
+class MirDataProcessor:
+    def __init__(self, download=False, dataset_name="billboard", batch_size=64):
         self.raw_data_dir = Path(__file__).parent / "raw"
         self.processed_data_dir = Path(__file__).parent / "processed"
         self.batch_size = batch_size
 
         # Define file paths
-        self.billboard_index_csv_fpath = self.raw_data_dir / "billboard_index.csv"
-        self.mapped_data_dir = self.raw_data_dir / "mapped_data"
         self.combined_csv_path = self.processed_data_dir / "combined_data.csv"
         self.scaler_path = self.processed_data_dir / "scaler.pkl"
         self.label_encoder_path = self.processed_data_dir / "label_encoder.pkl"
 
-        self.scaler = None | MinMaxScaler
-        self.label_encoder = None | LabelEncoder
+        self.scaler = None
+        self.label_encoder = None
 
         self.processed_data_dir.mkdir(parents=True, exist_ok=True)
 
-    @staticmethod
-    def _load_chroma_csv(fpath: str) -> pd.DataFrame:
-        data = pd.read_csv(fpath, header=None, dtype="float32", usecols=range(1, 26))
-        headers = ["timestamp"] + [
-            f"pitch_class_{i + 1}" for i in range(data.shape[1] - 1)
-        ]
-        data.columns = headers
-        return data
+        self.dataset = mirdata.initialize(
+            dataset_name, data_home=str(self.raw_data_dir)
+        )
 
-    def process_billboard_data(self):
+        if download:
+            self.dataset.download(cleanup=True, force_overwrite=True)
+
+    def process_data(self):
         """Processes the raw data and creates a combined CSV file for training."""
         combined_csv_path = self.combined_csv_path
 
-        # Remove the existing combined CSV if it exists
         if combined_csv_path.exists():
             combined_csv_path.unlink()
 
-        for subdir in os.listdir(self.mapped_data_dir):
-            subdir_id = str(int(subdir))
-            lab_path = self.mapped_data_dir / subdir / "annotations" / "full.lab"
-            chroma_csv_fpath = (
-                self.mapped_data_dir / subdir / "metadata" / "bothchroma.csv"
+        track_ids = self.dataset.track_ids
+        print(f"Found {len(track_ids)} tracks in the dataset.")
+
+        for track_id in track_ids:
+            track = self.dataset.track(track_id)
+
+            if track.chroma is None:
+                print(f"Chroma data not available for track {track_id}, skipping.")
+                continue
+
+            chroma_data = track.chroma
+            chroma_array = chroma_data[:, 1:]
+            timestamps = chroma_data[:, 0]
+
+            # Get chord annotations using mirdata
+            try:
+                # Singular library installed song threw an error when accessing this property
+                chord_data = track.chords_full
+            except ValueError:
+                print(f"Invalid chord data for track {track_id}, skipping.")
+                continue
+
+            # Ensure chord annotations are available
+            if chord_data is None or len(chord_data.intervals) == 0:
+                print(f"No chord annotations for track {track_id}, skipping.")
+                continue
+
+            chord_intervals = chord_data.intervals
+            chord_labels = chord_data.labels
+
+            # Use mir_eval to get the chord labels at the chroma timestamps
+            # This function maps each timestamp to the corresponding chord label
+            labels_at_times = np.array(
+                mir_eval.util.interpolate_intervals(
+                    chord_intervals, chord_labels, timestamps, fill_value="N"
+                )
             )
 
-            # Read chroma features
-            chroma_df = self._load_chroma_csv(str(chroma_csv_fpath))
-            timestamps = chroma_df["timestamp"].values
-            features = chroma_df.iloc[:, 1:].values
+            data_with_labels = np.hstack((chroma_array, labels_at_times.reshape(-1, 1)))
 
-            # Read chord annotations
-            chords = jams.util.import_lab("chord", str(lab_path))
-            chord_data = [(obs.time, obs.value) for obs in chords]
+            segment_df = pd.DataFrame(data_with_labels)
+            segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
 
-            # Align features and labels
-            labels = []
-            chord_index = 0
-            for time in timestamps:
-                while (
-                    chord_index < len(chord_data) - 1
-                    and chord_data[chord_index + 1][0] <= time
-                ):
-                    chord_index += 1
-                labels.append(chord_data[chord_index][1])
-
-            labels = np.array(labels)
-
-            # TODO look into more robust ways of semantically preserving individual song structure
-            song_data = np.hstack((features, labels.reshape(-1, 1)))
-            song_df = pd.DataFrame(song_data)
-
-            # Append to the combined CSV
-            song_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
-
-            print(f"Processed song {subdir_id} and appended data to combined CSV.")
+            print(f"Processed track {track_id} and appended data to combined CSV.")
 
         print(f"All data processed and saved to {combined_csv_path}")
 
@@ -91,11 +93,9 @@ class BillboardDataProcessor:
         print("Loading the combined CSV file...")
         combined_csv_path = self.combined_csv_path
 
-        # Load the combined data
         combined_df = pd.read_csv(combined_csv_path, header=None)
         data = combined_df.values
 
-        # Separate features and labels
         print("Separating features and labels...")
         features = data[:, :-1].astype(float)
         labels = data[:, -1].astype(str)
@@ -153,9 +153,12 @@ class BillboardDataProcessor:
         train_loader = DataLoader(
             train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
         )
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
+        test_loader = DataLoader(
+            test_dataset, batch_size=self.batch_size, num_workers=0
+        )
 
-        return train_loader, test_loader
+        print("Data loaders are ready for training and testing.")
+        return train_loader, test_loader, num_classes
 
     @staticmethod
     def _get_song_metadata(fpath: str) -> dict:
