@@ -66,6 +66,8 @@ class Solver:
 
         self.train_accuracy_history = []
         self.valid_accuracy_history = []
+        self.train_loss_history = []
+        self.valid_loss_history = []
 
     @classmethod
     def from_yaml(cls, cfg_path: str, **dynamic_kwargs):
@@ -81,35 +83,6 @@ class Solver:
             kwargs["model_kwargs"] = dynamic_kwargs
 
         return cls(**kwargs)
-
-    def train(self, dataloader):
-        self.model.train()
-        total_loss = 0.0
-        total_correct = 0
-        total_samples = 0
-
-        for inputs, labels in dataloader:
-            inputs = inputs.to(self.device)
-            labels = labels.to(self.device)
-
-            self.optimizer.zero_grad()
-
-            outputs = self.model(inputs)
-            loss = self.criterion(outputs, labels)
-
-            loss.backward()
-            self.optimizer.step()
-
-            total_loss += loss.item() * inputs.size(0)
-
-            _, predicted = torch.max(outputs, 1)
-            total_correct += (predicted == labels).sum().item()
-            total_samples += labels.size(0)
-
-        avg_loss = total_loss / total_samples
-        accuracy = total_correct / total_samples
-
-        return total_loss, avg_loss, accuracy
 
     def evaluate(self, dataloader):
         self.model.eval()
@@ -205,27 +178,41 @@ class Solver:
             )
 
         if plot_results:
-            self.plot_curves(f"{self.model.__class__.__name__}_accuracy_curve")
+            self.plot_curves(self.model.__class__.__name__)
 
-    def plot_curves(self, filename):
+    def plot_curves(self, file_prefix):
         epochs = [i + 1 for i in range(len(self.train_accuracy_history))]
 
+        # Plot accuracy curves
         plt.figure(figsize=(8, 6))
-
         plt.plot(
             epochs, self.train_accuracy_history, marker="o", label="Training Accuracy"
         )
         plt.plot(
             epochs, self.valid_accuracy_history, marker="s", label="Validation Accuracy"
         )
-
-        plt.title("Accuracy Curve - " + filename)
+        plt.title("Accuracy Curve")
         plt.xlabel("Epochs")
         plt.ylabel("Accuracy")
         plt.ylim(0, 1)
-
         plt.legend()
-        plt.savefig(f"{Path(__file__).parent}/figures/{filename}.png")
+        plt.savefig(f"{Path(__file__).parent}/figures/{file_prefix}_accuracy.png")
+        plt.show()
+
+        # Plot loss curves
+        plt.figure(figsize=(8, 6))
+        plt.plot(
+            epochs, self.train_loss_history, marker="o", label="Training Loss"
+        )
+        plt.plot(
+            epochs, self.valid_loss_history, marker="s", label="Validation Loss"
+        )
+        plt.title("Loss Curve")
+        plt.xlabel("Epochs")
+        plt.ylabel("Loss")
+        # Usually, no fixed ylim for loss, as it can vary widely
+        plt.legend()
+        plt.savefig(f"{Path(__file__).parent}/figures/{file_prefix}_loss.png")
         plt.show()
 
     def run_inference(
