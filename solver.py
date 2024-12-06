@@ -20,12 +20,21 @@ class Solver:
     def __init__(
         self, model=None, optimizer=None, criterion=None, scheduler=None, **kwargs
     ):
-        self.batch_size = kwargs.pop("batch_size", 128)
+        self.device = kwargs.pop("device", "cpu")
+        self.dtype = kwargs.pop("dtype", "float16")
+        self.batch_size = kwargs.pop("batch_size", 128) # not used
         self.model_type = kwargs.pop("model_type", "MLPChordClassifier")
         self.model_kwargs = kwargs.pop("model_kwargs", {})
-        self.device = kwargs.pop("device", "cpu")
+        
         self.lr = kwargs.pop("learning_rate", 0.001)
         self.epochs = kwargs.pop("epochs", 10)
+        self.warmup_epochs = kwargs.pop("warmup_epochs", 0)
+        self.early_stop_epochs = kwargs.pop("early_stop_epochs", 0)
+
+        self.direction = kwargs.pop("direction", "minimize") # direction to optimize loss function
+
+        self.train_dataloader = kwargs.pop("train_dataloader", None)
+        self.valid_dataloader = kwargs.pop("valid_dataloader", None)
 
         if model:
             self.model = model.to(self.device)
@@ -46,6 +55,11 @@ class Solver:
                     self.model = MLPChordClassifier(**self.model_kwargs)
             self.model.to(self.device)
 
+        if self.dtype == 'float16':
+            self.model = self.model.half()
+        elif self.dtype == 'bfloat16':
+            self.model = self.model.bfloat16()
+
         if optimizer:
             self.optimizer = optimizer
         else:
@@ -61,6 +75,7 @@ class Solver:
         else:
             self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
 
+        self.base_lr = optimizer.param_groups[0]['lr']
         self.train_accuracy_history = []
         self.valid_accuracy_history = []
 
@@ -133,7 +148,10 @@ class Solver:
 
         return total_loss, avg_loss, accuracy
 
-    def train_and_evaluate(self, train_loader, valid_loader, plot_results=False):
+    def train_and_evaluate(self, train_loader=None, valid_loader=None, plot_results=False):
+        train_loader = train_loader if train_loader is not None else self.train_dataloader
+        valid_loader = valid_loader if valid_loader is not None else self.valid_dataloader
+
         best_val_accuracy = 0
         for epoch_idx in range(self.epochs):
             print("-----------------------------------")
@@ -203,6 +221,12 @@ class Solver:
 
         if plot_results:
             self.plot_curves(f"{self.model.__class__.__name__}_accuracy_curve")
+
+    def __lr_warmup(self, epoch):
+        """Adjusts the learning rate according to the epoch during the warmup phase."""
+        lr = self.base_lr * (epoch / self.warmup_epochs)  # Linear warm-up
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = lr
 
     def plot_curves(self, filename):
         epochs = [i + 1 for i in range(len(self.train_accuracy_history))]
