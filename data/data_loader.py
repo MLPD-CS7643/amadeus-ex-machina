@@ -213,7 +213,7 @@ class MirDataProcessor:
         train_loader = DataLoader(
             train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
         )
-        test_loader = DataLoader(test_dataset, num_workers=0)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
 
         print("Data loaders are ready for training and testing.")
         return train_loader, test_loader, num_classes
