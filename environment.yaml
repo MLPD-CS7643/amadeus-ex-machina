@@ -16,6 +16,7 @@ dependencies:
   - scikit-learn
   - joblib
   - tqdm
+  - optuna
   - pip
   - pip:
       - torchaudio
