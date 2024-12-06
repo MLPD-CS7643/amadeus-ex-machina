@@ -1,79 +1,38 @@
-from pathlib import Path
 import yaml
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
 from tqdm.notebook import tqdm
-
-from models.mlp_chord_classifier import MLPChordClassifier
-from models.CNN import CNNModel
-from models.CRNN import CRNNModel
-from models.RNN import RNNModel
-from models.griddy_model import GriddyModel
-
+from torch.utils.data import DataLoader
 
 class Solver:
     def __init__(
-        self, model=None, optimizer=None, criterion=None, scheduler=None, **kwargs
+        self, model, optimizer, criterion, scheduler, train_dataloader:DataLoader, valid_dataloader:DataLoader, **kwargs
     ):
         self.device = kwargs.pop("device", "cpu")
         self.dtype = kwargs.pop("dtype", "float16")
-        self.batch_size = kwargs.pop("batch_size", 128) # not used
-        self.model_type = kwargs.pop("model_type", "MLPChordClassifier")
-        self.model_kwargs = kwargs.pop("model_kwargs", {})
+        self.batch_size = kwargs.pop("batch_size", 64)
         
-        self.lr = kwargs.pop("learning_rate", 0.001)
         self.epochs = kwargs.pop("epochs", 10)
-        self.warmup_epochs = kwargs.pop("warmup_epochs", 0)
-        self.early_stop_epochs = kwargs.pop("early_stop_epochs", 0)
+        self.warmup_epochs = kwargs.pop("warmup_epochs", 0) # 0 = disable
+        self.early_stop_epochs = kwargs.pop("early_stop_epochs", 0) # 0 = disable
 
-        self.direction = kwargs.pop("direction", "minimize") # direction to optimize loss function
+        self.direction = kwargs.pop("direction", "minimize") # direction to optimize loss function, not used atm but needed for griddy
 
-        self.train_dataloader = kwargs.pop("train_dataloader", None)
-        self.valid_dataloader = kwargs.pop("valid_dataloader", None)
+        self.train_dataloader = DataLoader(train_dataloader.dataset, batch_sampler=train_dataloader.batch_sampler, batch_size=self.batch_size)
+        self.valid_dataloader = valid_dataloader
 
-        if model:
-            self.model = model.to(self.device)
-        else:
-            match self.model_type:
-                case "MLPChordClassifier":
-                    self.model = MLPChordClassifier(**self.model_kwargs).to(self.device)
-                case "CNNModel":
-                    self.model = CNNModel(**self.model_kwargs).to(self.device)
-                case "CRNNModel":
-                    self.model = CRNNModel(**self.model_kwargs).to(self.device)
-                case "RNNModel":
-                    self.model = RNNModel(**self.model_kwargs).to(self.device)
-                case "GriddyModel":
-                    self.model = GriddyModel(**self.model_kwargs).to(self.device)
-                case _:
-                    # Default to MLPChordClassifier
-                    self.model = MLPChordClassifier(**self.model_kwargs)
-            self.model.to(self.device)
+        self.model = model.to(self.device)
+        self.optimizer = optimizer.to(self.device)
+        self.criterion = criterion.to(self.device)
+        self.scheduler = scheduler.to(self.device)
 
         if self.dtype == 'float16':
             self.model = self.model.half()
         elif self.dtype == 'bfloat16':
             self.model = self.model.bfloat16()
-
-        if optimizer:
-            self.optimizer = optimizer
-        else:
-            self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
-
-        if criterion:
-            self.criterion = criterion.to(self.device)
-        else:
-            self.criterion = nn.CrossEntropyLoss().to(self.device)
-
-        if scheduler:
-            self.scheduler = scheduler
-        else:
-            self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
 
         self.base_lr = optimizer.param_groups[0]['lr']
         self.train_accuracy_history = []
@@ -93,36 +52,7 @@ class Solver:
             kwargs["model_kwargs"] = dynamic_kwargs
 
         return cls(**kwargs)
-
-    def train(self, dataloader):
-        self.model.train()
-        total_loss = 0.0
-        total_correct = 0
-        total_samples = 0
-
-        for inputs, labels in dataloader:
-            inputs = inputs.to(self.device)
-            labels = labels.to(self.device)
-
-            self.optimizer.zero_grad()
-
-            outputs = self.model(inputs)
-            loss = self.criterion(outputs, labels)
-
-            loss.backward()
-            self.optimizer.step()
-
-            total_loss += loss.item() * inputs.size(0)
-
-            _, predicted = torch.max(outputs, 1)
-            total_correct += (predicted == labels).sum().item()
-            total_samples += labels.size(0)
-
-        avg_loss = total_loss / total_samples
-        accuracy = total_correct / total_samples
-
-        return total_loss, avg_loss, accuracy
-
+    
     def evaluate(self, dataloader):
         self.model.eval()
         total_loss = 0.0
@@ -147,16 +77,20 @@ class Solver:
         accuracy = total_correct / total_samples
 
         return total_loss, avg_loss, accuracy
+    
+    def train_and_evaluate(self, plot_results=False):
+        train_loader = self.train_dataloader
+        valid_loader = self.valid_dataloader
 
-    def train_and_evaluate(self, train_loader=None, valid_loader=None, plot_results=False):
-        train_loader = train_loader if train_loader is not None else self.train_dataloader
-        valid_loader = valid_loader if valid_loader is not None else self.valid_dataloader
-
+        no_improve = 0
         best_val_accuracy = 0
         for epoch_idx in range(self.epochs):
             print("-----------------------------------")
             print(f"Epoch {epoch_idx + 1}")
             print("-----------------------------------")
+
+            if epoch_idx <= self.warmup_epochs:
+                self.__lr_warmup(epoch_idx+1)
 
             # Set model to training mode
             self.model.train()
@@ -203,11 +137,14 @@ class Solver:
                 self.scheduler.step(avg_val_loss)
 
             if val_accuracy > best_val_accuracy:
+                no_improve = 0
                 best_val_accuracy = val_accuracy
                 torch.save(
                     self.model.state_dict(),
                     f"{Path(__file__).parent}/models/checkpoints/{self.model.__class__.__name__}_best_model.pth",
                 )
+            else:
+                no_improve += 1
 
             self.train_accuracy_history.append(train_accuracy)
             self.valid_accuracy_history.append(val_accuracy)
@@ -218,6 +155,10 @@ class Solver:
             print(
                 f"Training Accuracy: {train_accuracy:.4f}. Validation Accuracy: {val_accuracy:.4f}."
             )
+
+            if self.early_stop_epochs > 0 and no_improve >= self.early_stop_epochs:
+                print("EARLY STOP E:{} L:{:.4f}".format(epoch_idx+1, val_accuracy))
+                break
 
         if plot_results:
             self.plot_curves(f"{self.model.__class__.__name__}_accuracy_curve")

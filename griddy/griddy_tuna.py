@@ -91,7 +91,6 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, resume):
     Args:
         study_name (str)
         param_set (dict): full set of params following example pattern
-        fixed_params (dict): params to not grid search (lame)
         out_dir: (Path or str): folder to save output
         n_trials (int): number of trials
         n_jobs (int): number of workers
