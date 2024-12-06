@@ -1,5 +1,7 @@
 import os
 import yt_dlp
+from ipywidgets import IntProgress, HTML, VBox
+from IPython.display import display
 
 
 def parse_lab_file(lab_file_path):
@@ -44,16 +46,42 @@ def download_audio_from_youtube(query, output_path):
         str: The path to the downloaded file, or None if the download fails.
     """
     print(f"Initiating YouTube download for query: {query}")
+
+    progress_bar = IntProgress(value=0, min=0, max=100, description="Downloading:", bar_style="info")
+    progress_label = HTML(value="Preparing download...")
+    progress_box = VBox([progress_label, progress_bar])
+    display(progress_box)
+
+    def download_hook(d):
+        """
+        Hook function for yt_dlp to integrate with ipywidgets progress bar.
+        """
+        if d['status'] == 'downloading':
+            total = d.get('total_bytes') or d.get('total_bytes_estimate')
+            downloaded = d.get('downloaded_bytes', 0)
+            if total:
+                progress_bar.max = total
+                progress_bar.value = downloaded
+                progress_label.value = f"{(downloaded / total) * 100:.2f}% downloaded"
+        elif d['status'] == 'finished':
+            progress_bar.bar_style = "success"
+            progress_label.value = "Download complete!"
+        elif d['status'] == 'error':
+            progress_bar.bar_style = "danger"
+            progress_label.value = "Error during download!"
+
     ydl_opts = {
         'format': 'bestaudio/best',
-        'quiet': False,
+        'quiet': True,
         'outtmpl': output_path,
+        'progress_hooks': [download_hook],  # Use custom hook for progress
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
     }
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             search_results = ydl.extract_info(f"ytsearch:{query}", download=False)
@@ -61,12 +89,11 @@ def download_audio_from_youtube(query, output_path):
                 video_url = search_results['entries'][0]['url']
                 print(f"Found video URL: {video_url}. Starting download...")
                 ydl.download([video_url])
-                print(f"Download complete. File saved as {output_path}")
                 return output_path
             else:
-                print(f"No results found on YouTube for query: {query}")
+                progress_label.value = "No results found on YouTube for the query."
     except Exception as e:
-        print(f"Error during YouTube audio download: {e}")
+        progress_label.value = f"Error: {e}"
     return None
 
 
@@ -81,7 +108,6 @@ def process_lab_files(base_directory):
     for root, dirs, files in os.walk(base_directory):
         for file in files:
             if file.endswith(".txt"):
-                
                 print(f"\n\n\nEntering directory: {root}")
                 lab_file_path = os.path.join(root, file)
                 print(f"Processing .lab file: {lab_file_path}")
