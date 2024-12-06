@@ -89,7 +89,7 @@ class Solver:
             print(f"Epoch {epoch_idx + 1}")
             print("-----------------------------------")
 
-            if epoch_idx <= self.warmup_epochs:
+            if epoch_idx < self.warmup_epochs:
                 self.__lr_warmup(epoch_idx+1)
 
             # Set model to training mode
