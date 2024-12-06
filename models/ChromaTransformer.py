@@ -35,7 +35,7 @@ class ChromaTransformerModel(nn.Module):
             nhead=nhead,
             dim_feedforward=dim_feedforward,
             dropout=dropout,
-            activation="gelu",
+            activation="relu",
         )
         self.transformer_encoder = nn.TransformerEncoder(
             encoder_layer, num_layers=num_layers
@@ -50,12 +50,6 @@ class ChromaTransformerModel(nn.Module):
         )
 
     def forward(self, x):
-        """
-        Args:
-            x: Input tensor of shape (batch_size, seq_length, input_dim)
-        Returns:
-            logits: Output tensor of shape (batch_size, num_classes)
-        """
         _, seq_length, input_dim = x.size()
         if seq_length != self.seq_length:
             raise ValueError(
@@ -92,7 +86,7 @@ class PositionalEncoding(nn.Module):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
 
-        # Create constant 'pe' matrix with values dependent on
+        # Create constant positional encoding matrix with values dependent on
         # pos and i
         position = torch.arange(0, max_len).unsqueeze(1)
         div_term = torch.exp(
