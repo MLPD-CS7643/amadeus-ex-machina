@@ -2,8 +2,8 @@ from pathlib import Path
 import pickle
 
 import pandas as pd
-import mirdata
 import mir_eval
+import mirdata
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
