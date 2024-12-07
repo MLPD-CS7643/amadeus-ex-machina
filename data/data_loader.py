@@ -12,7 +12,7 @@ from sklearn.model_selection import train_test_split
 
 
 class MirDataProcessor:
-    def __init__(self, download=False, dataset_name="billboard", batch_size=64, seq_length=16, process_sequential=False):
+    def __init__(self, download=False, dataset_name="billboard", output_dir=None, batch_size=64, seq_length=16, process_sequential=False):
         """
         Encapsulates utilities for downloading publicly available MIR datasets and preprocessing them to be
         suitable for model training and testing.
@@ -23,7 +23,7 @@ class MirDataProcessor:
         :param process_sequential: flag to determine whether to process the data as sequential or tabular data
         """
         self.raw_data_dir = Path(__file__).parent / "raw"
-        self.processed_data_dir = Path(__file__).parent / "processed"
+        self.processed_data_dir = Path(output_dir) if output_dir else Path(__file__).parent / "processed"
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.process_sequential = process_sequential

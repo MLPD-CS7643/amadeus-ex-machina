@@ -167,9 +167,7 @@ def __instantiate_class_with_trial_params(trial, class_group, param_set, pass_th
     else:
         class_params = {}
     for key, values in param_group_dict[chosen_class].items():
-
         if isinstance(values, list):
-            print(values)
             if len(values) > 1:
                 if isinstance(values[-1], SearchMethod):
                     search_method = values[-1]
