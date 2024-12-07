@@ -1,4 +1,5 @@
 import os
+import copy
 import inspect
 import torch
 import optuna
@@ -85,7 +86,7 @@ PARAM_SET = {
     "criterion" : CRITERION_PARAMS,
 }
 
-def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, resume):
+def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
     """
     I am addicted to hitting the griddy.
 
@@ -95,6 +96,7 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, resume):
         out_dir: (Path or str): folder to save output
         n_trials (int): number of trials
         n_jobs (int): number of workers
+        prune (bool): enable optuna pruning
         resume (bool): resume existing study if one exists
 
     Returns:
@@ -106,27 +108,33 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, resume):
     full_path = os.path.join(out_dir, f"{study_name}.db")
     storage_path = f'sqlite:///{full_path}'
 
+    if not resume:
+        try:
+            optuna.delete_study(study_name=study_name, storage=storage_path)
+        except:
+            pass
+
     study = optuna.create_study(study_name=study_name, direction=__get_direction(param_set), storage=storage_path, load_if_exists=resume)
-    objective = __create_objective(param_set, out_dir)
+    objective = __create_objective(param_set, out_dir, prune)
     study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
 
     print("DONE")
 
-def __create_objective(param_set, save_dir):
+def __create_objective(param_set, save_dir, prune):
     # optuna objective function
     def objective(trial):
-        model = __instantiate_class_with_trial_params(trial, 'model', param_set)
-        optimizer = __instantiate_class_with_trial_params(trial, 'optim', param_set)
-        scheduler = __instantiate_class_with_trial_params(trial, 'sched', param_set, pass_through_kwargs={'optimizer': optimizer})
-        criterion = __instantiate_class_with_trial_params(trial, 'criterion', param_set)
-        solver:Solver = __instantiate_class_with_trial_params(trial, 'solver', param_set, enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion})
+        model = __instantiate_class_with_trial_params(trial, 'model', copy.deepcopy(param_set), enforce_single_class=True)
+        optimizer = __instantiate_class_with_trial_params(trial, 'optim', copy.deepcopy(param_set), pass_through_kwargs={'params': model.parameters()})
+        scheduler = __instantiate_class_with_trial_params(trial, 'sched', copy.deepcopy(param_set), pass_through_kwargs={'optimizer': optimizer})
+        criterion = __instantiate_class_with_trial_params(trial, 'criterion', copy.deepcopy(param_set))
+        solver:Solver = __instantiate_class_with_trial_params(trial, 'solver', copy.deepcopy(param_set), enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion, 'optuna_prune': prune})
         best_metric = solver.train_and_evaluate(trial)
-        if trial.study.best_trial.number == trial.number:
-            torch.save(solver.best_model, Path(save_dir) / f'{solver.best_model.__class__.__name__}_best_model.pth')
+        #if len(trial.study.trials_dataframe().dropna(subset=['value'])) > 0 and trial.study.best_trial.number == trial.number:
+        #    torch.save(solver.best_model, Path(save_dir) / f'{solver.best_model.__class__.__name__}_best_model.pth')
         return best_metric
     return objective
 
-def __instantiate_class_with_trial_params(trial, class_group, param_set, pass_through_kwargs = {}, enforce_single_class=False):
+def __instantiate_class_with_trial_params(trial, class_group, param_set, pass_through_kwargs:dict=None, enforce_single_class=False):
     """
     Dynamically creates an instance of a class based on Optuna trial suggestions.
     
@@ -147,17 +155,33 @@ def __instantiate_class_with_trial_params(trial, class_group, param_set, pass_th
         raise ValueError(f"Only one class is allowed in the {class_group} group when 'enforce_single_class' is True.")
 
     if len(class_keys) > 1:
-        chosen_class = trial.suggest_categorical(f'{class_group}_class', class_keys)
+        class_key_map = {cls.__name__: cls for cls in class_keys}
+        chosen_class_str = trial.suggest_categorical(f'{class_group}_class', list(class_key_map.keys()))
+        chosen_class = class_key_map[chosen_class_str]
     else:
         chosen_class = class_keys[0]
 
     # Collect parameters for the chosen class
-    class_params = pass_through_kwargs
+    if pass_through_kwargs:
+        class_params = pass_through_kwargs
+    else:
+        class_params = {}
     for key, values in param_group_dict[chosen_class].items():
-        if isinstance(values, Iterable) and not isinstance(values, (str, bytes)):
+
+        if isinstance(values, list):
+            print(values)
             if len(values) > 1:
-                search_method = values[-1] if isinstance(values[-1], SearchMethod) else SearchMethod.CATEGORICAL
-                class_params[key] = __create_optuna_suggest(trial, key, values, search_method)
+                if isinstance(values[-1], SearchMethod):
+                    search_method = values[-1]
+                    values.pop()
+                else:
+                    search_method = SearchMethod.CATEGORICAL
+                if len(class_keys) > 1:
+                    unique_key = f"{chosen_class_str}_{key}"
+                    param_value = __create_optuna_suggest(trial, unique_key, values, search_method)
+                else:
+                    param_value = __create_optuna_suggest(trial, key, values, search_method)
+                class_params[key] = param_value
             elif len(values) == 1:
                 class_params[key] = values[0]
         else:
@@ -168,12 +192,10 @@ def __instantiate_class_with_trial_params(trial, class_group, param_set, pass_th
 
 def __create_optuna_suggest(trial, name, values, method):
     if method == SearchMethod.CATEGORICAL:
-        return trial.suggest_categorical(name, [v for v in values if not isinstance(v, SearchMethod)])
+        return trial.suggest_categorical(name, values)
     elif method == SearchMethod.UNIFORM:
-        values = [v for v in values if not isinstance(v, SearchMethod)]
         return trial.suggest_uniform(name, min(values), max(values))
     elif method == SearchMethod.LOG_UNIFORM:
-        values = [v for v in values if not isinstance(v, SearchMethod)]
         return trial.suggest_loguniform(name, min(values), max(values))
 
 def __get_direction(param_set):
@@ -188,7 +210,8 @@ def __get_direction(param_set):
             ValueError(f"param_set must include solver class with \"direction\" entry.")
 
 def __validate_params(chosen_class, class_params):
-    valid_params = inspect.signature(chosen_class.__init__).parameters
+    valid_params = dict(inspect.signature(chosen_class.__init__).parameters)
+    valid_params.pop('kwargs', None)
     valid_keys = set(valid_params.keys())
     provided_keys = set(class_params.keys())
 

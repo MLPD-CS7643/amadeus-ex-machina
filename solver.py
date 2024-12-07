@@ -11,30 +11,31 @@ from torch.utils.data import DataLoader
 
 class Solver:
     def __init__(
-        self, model, optimizer, criterion, scheduler, train_dataloader:DataLoader, valid_dataloader:DataLoader, **kwargs
+        self, model, optimizer, criterion, scheduler, train_dataloader:DataLoader, valid_dataloader:DataLoader, batch_size, epochs, device='cpu', direction='minimize', early_stop_epochs=0, warmup_epochs=0,  dtype='float16', optuna_prune=False, **kwargs
     ):
-        self.device = kwargs.pop("device", "cpu")
-        self.dtype = kwargs.pop("dtype", "float16")
-        self.batch_size = kwargs.pop("batch_size", 64)
+        self.device = device
+        self.dtype = dtype
+        self.batch_size = batch_size
         
-        self.epochs = kwargs.pop("epochs", 10)
-        self.warmup_epochs = kwargs.pop("warmup_epochs", 0) # 0 = disable
-        self.early_stop_epochs = kwargs.pop("early_stop_epochs", 0) # 0 = disable
+        self.epochs = epochs
+        self.warmup_epochs = warmup_epochs # 0 = disable
+        self.early_stop_epochs = early_stop_epochs # 0 = disable
 
-        self.direction = kwargs.pop("direction", "minimize") # direction to optimize loss function, not used atm but needed for griddy
+        self.optuna_prune = optuna_prune
+        self.direction = direction # direction to optimize loss function, not used atm but needed for griddy
 
-        self.train_dataloader = DataLoader(train_dataloader.dataset, batch_sampler=train_dataloader.batch_sampler, batch_size=self.batch_size)
+        self.train_dataloader = DataLoader(train_dataloader.dataset, batch_size=self.batch_size, shuffle=True) # workaround to allow griddy of batch_size
         self.valid_dataloader = valid_dataloader
 
         self.model = model.to(self.device)
-        self.optimizer = optimizer.to(self.device)
-        self.criterion = criterion.to(self.device)
-        self.scheduler = scheduler.to(self.device)
+        self.optimizer = optimizer
+        self.criterion = criterion
+        self.scheduler = scheduler
 
-        if self.dtype == 'float16':
-            self.model = self.model.half()
-        elif self.dtype == 'bfloat16':
-            self.model = self.model.bfloat16()
+        # if self.dtype == 'float16':
+        #     self.model = self.model.half()
+        # elif self.dtype == 'bfloat16':
+        #     self.model = self.model.bfloat16()
 
         self.base_lr = optimizer.param_groups[0]['lr']
         self.train_accuracy_history = []
@@ -166,7 +167,7 @@ class Solver:
                 trial.set_user_attr(f'val_loss_epoch_{epoch_idx+1}', avg_val_loss)
                 trial.set_user_attr(f'train_acc_epoch_{epoch_idx+1}', train_accuracy)
                 trial.set_user_attr(f'val_acc_epoch_{epoch_idx+1}', val_accuracy)
-                if trial.should_prune():
+                if self.optuna_prune and trial.should_prune():
                     print("OPTUNA PRUNED E:{} L:{:.4f}".format(epoch_idx+1, avg_val_loss))
                     raise optuna.exceptions.TrialPruned()
             
