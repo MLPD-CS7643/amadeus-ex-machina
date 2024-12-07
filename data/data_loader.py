@@ -117,7 +117,7 @@ class MirDataProcessor:
         print("Loading the combined CSV file...")
         combined_csv_path = self.combined_csv_path
 
-        combined_df = pd.read_csv(combined_csv_path, header=None)
+        combined_df = pd.read_csv(combined_csv_path, header=None, nrows=nrows)
         data = combined_df.values
 
         if self.process_sequential:
