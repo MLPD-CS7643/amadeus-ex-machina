@@ -1,73 +1,49 @@
-from pathlib import Path
 import yaml
-
+import copy
 import torch
-import torch.nn as nn
-import torch.optim as optim
+import optuna
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
 from tqdm.notebook import tqdm
-
-from models.ChromaTransformer import ChromaTransformerModel 
-from models.mlp_chord_classifier import MLPChordClassifier
-from models.CNN import CNNModel
-from models.CRNN import CRNNModel
-from models.RNN import RNNModel
-from models.griddy_model import GriddyModel
-
+from torch.utils.data import DataLoader
 
 class Solver:
     def __init__(
-        self, model=None, optimizer=None, criterion=None, scheduler=None, **kwargs
+        self, model, optimizer, criterion, scheduler, train_dataloader:DataLoader, valid_dataloader:DataLoader, batch_size, epochs, device='cpu', direction='minimize', early_stop_epochs=0, warmup_epochs=0,  dtype='float16', optuna_prune=False, **kwargs
     ):
-        self.batch_size = kwargs.pop("batch_size", 128)
-        self.model_type = kwargs.pop("model_type", "MLPChordClassifier")
-        self.model_kwargs = kwargs.pop("model_kwargs", {})
-        self.device = kwargs.pop("device", "cpu")
-        self.lr = kwargs.pop("learning_rate", 0.001)
-        self.epochs = kwargs.pop("epochs", 10)
+        self.device = device
+        self.dtype = dtype
+        self.batch_size = batch_size
+        
+        self.epochs = epochs
+        self.warmup_epochs = warmup_epochs # 0 = disable
+        self.early_stop_epochs = early_stop_epochs # 0 = disable
 
-        if model:
-            self.model = model.to(self.device)
-        else:
-            match self.model_type:
-                case "MLPChordClassifier":
-                    self.model = MLPChordClassifier(**self.model_kwargs).to(self.device)
-                case "CNNModel":
-                    self.model = CNNModel(**self.model_kwargs).to(self.device)
-                case "CRNNModel":
-                    self.model = CRNNModel(**self.model_kwargs).to(self.device)
-                case "RNNModel":
-                    self.model = RNNModel(**self.model_kwargs).to(self.device)
-                case "GriddyModel":
-                    self.model = GriddyModel(**self.model_kwargs).to(self.device)
-                case "ChromaTransformerModel":
-                    self.model = ChromaTransformerModel(**self.model_kwargs).to(self.device)
-                case _:
-                    # Default to MLPChordClassifier
-                    self.model = MLPChordClassifier(**self.model_kwargs)
-            self.model.to(self.device)
+        self.optuna_prune = optuna_prune
+        self.direction = direction # direction to optimize loss function, not used atm but needed for griddy
 
-        if optimizer:
-            self.optimizer = optimizer
-        else:
-            self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
+        self.train_dataloader = DataLoader(train_dataloader.dataset, batch_size=self.batch_size, shuffle=True) # workaround to allow griddy of batch_size
+        self.valid_dataloader = valid_dataloader
 
-        if criterion:
-            self.criterion = criterion.to(self.device)
-        else:
-            self.criterion = nn.CrossEntropyLoss().to(self.device)
+        self.model = model.to(self.device)
+        self.optimizer = optimizer
+        self.criterion = criterion
+        self.scheduler = scheduler
 
-        if scheduler:
-            self.scheduler = scheduler
-        else:
-            self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer)
+        # if self.dtype == 'float16':
+        #     self.model = self.model.half()
+        # elif self.dtype == 'bfloat16':
+        #     self.model = self.model.bfloat16()
 
+        self.base_lr = optimizer.param_groups[0]['lr']
         self.train_accuracy_history = []
         self.valid_accuracy_history = []
         self.train_loss_history = []
         self.valid_loss_history = []
+
+        self.best_model = None
 
     @classmethod
     def from_yaml(cls, cfg_path: str, **dynamic_kwargs):
@@ -83,7 +59,7 @@ class Solver:
             kwargs["model_kwargs"] = dynamic_kwargs
 
         return cls(**kwargs)
-
+    
     def evaluate(self, dataloader):
         self.model.eval()
         total_loss = 0.0
@@ -108,13 +84,21 @@ class Solver:
         accuracy = total_correct / total_samples
 
         return total_loss, avg_loss, accuracy
+    
+    def train_and_evaluate(self, trial=None, plot_results=False):
+        train_loader = self.train_dataloader
+        valid_loader = self.valid_dataloader
 
-    def train_and_evaluate(self, train_loader, valid_loader, plot_results=False):
+        no_improve = 0
+        best_loss = float('inf')
         best_val_accuracy = 0
         for epoch_idx in range(self.epochs):
             print("-----------------------------------")
             print(f"Epoch {epoch_idx + 1}")
             print("-----------------------------------")
+
+            if epoch_idx < self.warmup_epochs:
+                self.__lr_warmup(epoch_idx+1)
 
             # Set model to training mode
             self.model.train()
@@ -162,6 +146,7 @@ class Solver:
 
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
+                self.best_model = copy.deepcopy(self.model)
                 torch.save(
                     self.model.state_dict(),
                     f"{Path(__file__).parent}/models/checkpoints/{self.model.__class__.__name__}_best_model.pth",
@@ -177,10 +162,39 @@ class Solver:
                 f"Training Accuracy: {train_accuracy:.4f}. Validation Accuracy: {val_accuracy:.4f}."
             )
 
+            # Optuna injection
+            if trial:
+                trial.report(val_loss, epoch_idx+1)
+                trial.set_user_attr(f'train_loss_epoch_{epoch_idx+1}', avg_train_loss)
+                trial.set_user_attr(f'val_loss_epoch_{epoch_idx+1}', avg_val_loss)
+                trial.set_user_attr(f'train_acc_epoch_{epoch_idx+1}', train_accuracy)
+                trial.set_user_attr(f'val_acc_epoch_{epoch_idx+1}', val_accuracy)
+                if self.optuna_prune and trial.should_prune():
+                    print("OPTUNA PRUNED E:{} L:{:.4f}".format(epoch_idx+1, avg_val_loss))
+                    raise optuna.exceptions.TrialPruned()
+            
+            if self.early_stop_epochs > 0:
+                if val_loss < best_loss:
+                    best_loss = val_loss
+                    no_improve = 0
+                else:
+                    no_improve += 1
+                    if no_improve >= self.early_stop_epochs:
+                        print("EARLY STOP E:{} L:{:.4f}".format(epoch_idx+1, avg_val_loss))
+                        break
+
         if plot_results:
             self.plot_curves(self.model.__class__.__name__)
 
-    def plot_curves(self, file_prefix):
+        return best_val_accuracy
+
+    def __lr_warmup(self, epoch):
+        """Adjusts the learning rate according to the epoch during the warmup phase."""
+        lr = self.base_lr * (epoch / self.warmup_epochs)  # Linear warm-up
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = lr
+
+    def plot_curves(self, filename):
         epochs = [i + 1 for i in range(len(self.train_accuracy_history))]
 
         # Plot accuracy curves

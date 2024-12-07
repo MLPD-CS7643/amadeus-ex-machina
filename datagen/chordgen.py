@@ -11,10 +11,8 @@ from utils.gdrive import download_from_gdrive
 JSON_FILE = "chord_ref.json"
 SF2_ARCHIVE = "sf2.zip"
 
-thisdir = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.join(thisdir, "chordgen")
-WAV_DIR = os.path.join(BASE_DIR, "wav")
-SF2_DIR = os.path.join(BASE_DIR, "sf2")
+WAV_DIR = "wav"
+SF2_DIR = "sf2"
 
 SAMPLE_RATE = 44100
 BIT_DEPTH = 16
@@ -42,21 +40,25 @@ CHORDS = {
     "7b9": [0, 4, 7, 10, 13]
 }
 
-def generate_all_chords(download_sf2:bool=False, start_octave:int=4, end_octave:int=4, out_dir=BASE_DIR):
+def generate_all_chords(out_dir, download_sf2, start_octave:int=4, end_octave:int=4, make_dir=False):
     """
     Generates .wav files for all defined chords using all available SoundFonts.
     Also saves chord_ref.json lookup table with metadata.
 
     Args:
+        out_dir (str): output directory
         download_sf2 (bool): download repository of SoundFonts
         start_octave (int): first octave (min 0)
         end_octave (int): last octave (max 7)
-        out_dir (str): output directory
+        make_dir (bool): automatically create output directory if it doesn't exist (make sure you know where your working directory is set)
     
     Returns:
         None
     """
     base_path = Path(out_dir)
+    if make_dir:
+        base_path.mkdir(parents=True, exist_ok=True)
+
     sf2_path = base_path / SF2_DIR
     wav_path = base_path / WAV_DIR
     if download_sf2:
@@ -165,7 +167,6 @@ def __synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0,
     else:
         print(f"Unsupported bit depth of {bit_depth}")
         return
-
 
     # Save the synthesized audio to a WAV file
     with wave.open(output_file, 'wb') as wf:

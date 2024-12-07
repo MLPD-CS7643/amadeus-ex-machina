@@ -2,8 +2,8 @@ from pathlib import Path
 import pickle
 
 import pandas as pd
-import mirdata
 import mir_eval
+import mirdata
 import torch
 from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
@@ -106,12 +106,12 @@ class MirDataProcessor:
 
         print(f"All data processed and saved to {combined_csv_path}")
 
-    def prepare_model_data(self):
+    def prepare_model_data(self, nrows = None):
         """Prepares the data for training by loading the combined CSV and processing it."""
         print("Loading the combined CSV file...")
         combined_csv_path = self.combined_csv_path
 
-        combined_df = pd.read_csv(combined_csv_path, header=None)
+        combined_df = pd.read_csv(combined_csv_path, header=None, nrows=nrows)
         data = combined_df.values
 
         if self.process_sequential:
@@ -129,6 +129,7 @@ class MirDataProcessor:
         print("Scaling features using MinMaxScaler...")
         self.scaler = MinMaxScaler()
         prepped_features = self.scaler.fit_transform(features)
+
 
         print("Encoding labels using LabelEncoder...")
         self.label_encoder = LabelEncoder()
@@ -181,10 +182,10 @@ class MirDataProcessor:
         print("Data preparation complete.")
         return X_train, X_test, y_train, y_test
 
-    def build_data_loaders(self, device="cuda"):
+    def build_data_loaders(self, nrows=None, device="cuda"):
         """Creates data loaders from the preprocessed model data."""
         print("Preparing model data...")
-        X_train, X_test, y_train, y_test = self.prepare_model_data()
+        X_train, X_test, y_train, y_test = self.prepare_model_data(nrows=nrows)
 
         # Determine the number of classes
         num_classes = len(self.label_encoder.classes_)
