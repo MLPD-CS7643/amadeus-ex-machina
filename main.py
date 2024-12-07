@@ -1,6 +1,7 @@
 import sys
 
 from data.data_loader import MirDataProcessor
+from utils.model_utils import run_tabular_chroma_inference
 from solver import Solver
 
 
@@ -35,9 +36,9 @@ if __name__ == "__main__":
     scaler = data_processor.scaler
     label_encoder = data_processor.label_encoder
 
-    # Run inference using the trained model
-    solver.run_inference(
+    run_tabular_chroma_inference(
         chroma_path,
+        solver.model,
         scaler,
-        label_encoder,
+        label_encoder
     )

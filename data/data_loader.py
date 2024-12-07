@@ -16,10 +16,28 @@ from utils.chord_remap import remap_chord_label, CullMode
 
 
 class MirDataProcessor:
-    def __init__(self, download=False, dataset_name="billboard", batch_size=64):
+    def __init__(
+        self,
+        download=False,
+        dataset_name="billboard",
+        batch_size=64,
+        seq_length=16,
+        process_sequential=False,
+    ):
+        """
+        Encapsulates utilities for downloading publicly available MIR datasets and preprocessing them to be
+        suitable for model training and testing.
+        :param download: flag to determine if data should be downloaded upon instantiation
+        :param dataset_name: identifier for the MIR dataset to be downloaded
+        :param batch_size: batch used utilized by the pytorch dataloaders
+        :param seq_length: length of sequences projected in sequential data processing
+        :param process_sequential: flag to determine whether to process the data as sequential or tabular data
+        """
         self.raw_data_dir = Path(__file__).parent / "raw"
         self.processed_data_dir = Path(__file__).parent / "processed"
         self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.process_sequential = process_sequential
 
         # Define file paths
         self.combined_csv_path = self.processed_data_dir / "combined_data.csv"
@@ -74,12 +92,15 @@ class MirDataProcessor:
 
             chord_intervals = chord_data.intervals
             chord_labels = chord_data.labels
-            for chord_label in chord_labels:
-                remapped_root, remapped_chord_class = remap_chord_label(chord_label, cull_mode)
-                if remapped_root == 'N':
-                    chord_label = 'N'
-                else:
-                    chord_label = f'{remapped_root}:{remapped_chord_class}'
+            for i, chord_label in enumerate(chord_labels):
+                remapped_root, remapped_chord_class = remap_chord_label(
+                    chord_label, cull_mode
+                )
+                chord_labels[i] = (
+                    "N"
+                    if remapped_root == "N"
+                    else f"{remapped_root}:{remapped_chord_class}"
+                )
 
             # Use mir_eval to get the chord labels at the chroma timestamps
             # This function maps each timestamp to the corresponding chord label
@@ -89,7 +110,18 @@ class MirDataProcessor:
                 )
             )
 
-            data_with_labels = np.hstack((chroma_array, labels_at_times.reshape(-1, 1)))
+            if self.process_sequential:
+                print("Processing dataset as sequential data")
+                # Combine song_id, chroma features, and labels
+                song_id_column = np.full((chroma_array.shape[0], 1), track_id)
+                data_with_labels = np.hstack(
+                    (song_id_column, chroma_array, labels_at_times.reshape(-1, 1))
+                )
+            else:
+                print("Processing dataset as tabular data")
+                data_with_labels = np.hstack(
+                    (chroma_array, labels_at_times.reshape(-1, 1))
+                )
 
             segment_df = pd.DataFrame(data_with_labels)
             segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
@@ -141,7 +173,7 @@ class MirDataProcessor:
 
         print(f"All data processed and saved to {combined_csv_path}")
 
-    def prepare_model_data(self, nrows = None):
+    def prepare_model_data(self, nrows=None):
         """Prepares the data for training by loading the combined CSV and processing it."""
         print("Loading the combined CSV file...")
         combined_csv_path = self.combined_csv_path
@@ -149,19 +181,25 @@ class MirDataProcessor:
         combined_df = pd.read_csv(combined_csv_path, header=None, nrows=nrows)
         data = combined_df.values
 
-        print("Separating features and labels...")
-        features = data[:, :-1].astype(float)
+        if self.process_sequential:
+            print("Separating song IDs, features, and labels...")
+            # The first column is 'song_id', the last column is 'label', and the rest are features
+            song_ids = data[:, 0].astype(str)
+            features = data[:, 1:-1].astype(float)
+        else:
+            print("Separating features and labels...")
+            features = data[:, :-1].astype(float)
+
         labels = data[:, -1].astype(str)
 
         # Fit scaler and label encoder
         print("Scaling features using MinMaxScaler...")
         self.scaler = MinMaxScaler()
-        features_scaled = self.scaler.fit_transform(features)
-
+        prepped_features = self.scaler.fit_transform(features)
 
         print("Encoding labels using LabelEncoder...")
         self.label_encoder = LabelEncoder()
-        labels_encoded = self.label_encoder.fit_transform(labels)
+        prepped_labels = self.label_encoder.fit_transform(labels)
 
         # Save scaler and label encoder for future use
         print(f"Saving the scaler to {self.scaler_path}...")
@@ -172,10 +210,43 @@ class MirDataProcessor:
         with open(self.label_encoder_path, "wb") as f:
             pickle.dump(self.label_encoder, f)
 
+        if self.process_sequential:
+            X_sequences = []
+            y_sequences = []
+
+            print("Creating sequences of chromagram data within song boundaries...")
+            # Group data by song_id
+            unique_song_ids = np.unique(song_ids)
+
+            for song_id in unique_song_ids:
+                # Get indices for this song
+                song_indices = np.where(song_ids == song_id)[0]
+                song_features = prepped_features[song_indices]
+                song_labels = prepped_labels[song_indices]
+
+                num_samples = song_features.shape[0] - self.seq_length + 1
+
+                if num_samples <= 0:
+                    print(
+                        f"Song {song_id} has insufficient data for the given sequence length, skipping."
+                    )
+                    continue
+
+                for i in range(num_samples):
+                    X_seq = song_features[i : i + self.seq_length, :]
+                    y_seq = song_labels[
+                        i + self.seq_length // 2
+                    ]  # Using the label at the center of the sequence
+                    X_sequences.append(X_seq)
+                    y_sequences.append(y_seq)
+
+            prepped_features = np.array(X_sequences)
+            prepped_labels = np.array(y_sequences)
+
         # Split data into training and testing sets
         print("Splitting data into training and testing sets...")
         X_train, X_test, y_train, y_test = train_test_split(
-            features_scaled, labels_encoded, test_size=0.2, random_state=42
+            prepped_features, prepped_labels, test_size=0.2, random_state=42
         )
 
         print("Data preparation complete.")
@@ -187,7 +258,7 @@ class MirDataProcessor:
         X_train, X_test, y_train, y_test = self.prepare_model_data(nrows=nrows)
 
         # Determine the number of classes
-        num_classes = len(set(y_train))  # Unique labels in the training set
+        num_classes = len(self.label_encoder.classes_)
         print(f"Number of classes determined: {num_classes}")
 
         # Convert to PyTorch tensors
