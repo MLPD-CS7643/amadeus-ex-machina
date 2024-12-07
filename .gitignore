@@ -51,6 +51,9 @@ datagen/fx_out/*/*.txt
 # Models
 *.pth
 
+# Optuna Studies
+*.db
+
 # Don't upload massive data files to git
 data/raw/
 data/processed/

@@ -23,6 +23,8 @@ dependencies:
       - jams
       - mido
       - gdown
+      - tinysoundfont
+      - optuna
       - mirdata
       - yt_dlp
       - mir_eval
