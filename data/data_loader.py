@@ -154,8 +154,9 @@ class MirDataProcessor:
             chord_intervals = chord_data.intervals
             chord_labels = chord_data.labels
 
-            timestamps = range(len(wav))
-
+            timestamps = range(0, wav.shape[0])
+            #converting interval times to the corresponding wav index
+            chord_intervals = chord_intervals * sample_rate
             # Use mir_eval to get the chord labels at the chroma timestamps
             # This function maps each timestamp to the corresponding chord label
             labels_at_times = np.array(
@@ -164,7 +165,13 @@ class MirDataProcessor:
                 )
             )
 
-            data_with_labels = np.column_stack((wav, labels_at_times))
+            if self.process_sequential:
+                print("Processing dataset as sequential data")
+                track_id_column = np.full((wav.shape[0], 1), track_id)
+                data_with_labels = np.column_stack((track_id_column, wav, labels_at_times))
+            else:
+                print("Processing dataset as tabular data")
+                data_with_labels = np.column_stack((wav, labels_at_times))
 
             segment_df = pd.DataFrame(data_with_labels)
             segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
