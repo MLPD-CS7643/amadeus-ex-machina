@@ -172,7 +172,6 @@ class Solver:
             self.train_loss_history.append(avg_train_loss)
             self.valid_loss_history.append(avg_val_loss)
 
-
             print(
                 f"Training Loss: {avg_train_loss:.4f}. Validation Loss: {avg_val_loss:.4f}."
             )
