@@ -12,7 +12,14 @@ from utils.chord_remap import remap_chord_label, CullMode
 
 
 class MirDataProcessor:
-    def __init__(self, download=False, dataset_name="billboard", batch_size=64, seq_length=16, process_sequential=False):
+    def __init__(
+        self,
+        download=False,
+        dataset_name="billboard",
+        batch_size=64,
+        seq_length=16,
+        process_sequential=False,
+    ):
         """
         Encapsulates utilities for downloading publicly available MIR datasets and preprocessing them to be
         suitable for model training and testing.
@@ -81,12 +88,15 @@ class MirDataProcessor:
 
             chord_intervals = chord_data.intervals
             chord_labels = chord_data.labels
-            for chord_label in chord_labels:
-                remapped_root, remapped_chord_class = remap_chord_label(chord_label, cull_mode)
-                if remapped_root == 'N':
-                    chord_label = 'N'
-                else:
-                    chord_label = f'{remapped_root}:{remapped_chord_class}'
+            for i, chord_label in enumerate(chord_labels):
+                remapped_root, remapped_chord_class = remap_chord_label(
+                    chord_label, cull_mode
+                )
+                chord_labels[i] = (
+                    "N"
+                    if remapped_root == "N"
+                    else f"{remapped_root}:{remapped_chord_class}"
+                )
 
             # Use mir_eval to get the chord labels at the chroma timestamps
             # This function maps each timestamp to the corresponding chord label
@@ -100,10 +110,14 @@ class MirDataProcessor:
                 print("Processing dataset as sequential data")
                 # Combine song_id, chroma features, and labels
                 song_id_column = np.full((chroma_array.shape[0], 1), track_id)
-                data_with_labels = np.hstack((song_id_column, chroma_array, labels_at_times.reshape(-1, 1)))
+                data_with_labels = np.hstack(
+                    (song_id_column, chroma_array, labels_at_times.reshape(-1, 1))
+                )
             else:
                 print("Processing dataset as tabular data")
-                data_with_labels = np.hstack((chroma_array, labels_at_times.reshape(-1, 1)))
+                data_with_labels = np.hstack(
+                    (chroma_array, labels_at_times.reshape(-1, 1))
+                )
 
             segment_df = pd.DataFrame(data_with_labels)
             segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
@@ -112,7 +126,7 @@ class MirDataProcessor:
 
         print(f"All data processed and saved to {combined_csv_path}")
 
-    def prepare_model_data(self, nrows = None):
+    def prepare_model_data(self, nrows=None):
         """Prepares the data for training by loading the combined CSV and processing it."""
         print("Loading the combined CSV file...")
         combined_csv_path = self.combined_csv_path
@@ -166,12 +180,16 @@ class MirDataProcessor:
                 num_samples = song_features.shape[0] - self.seq_length + 1
 
                 if num_samples <= 0:
-                    print(f"Song {song_id} has insufficient data for the given sequence length, skipping.")
+                    print(
+                        f"Song {song_id} has insufficient data for the given sequence length, skipping."
+                    )
                     continue
 
                 for i in range(num_samples):
-                    X_seq = song_features[i:i + self.seq_length, :]
-                    y_seq = song_labels[i + self.seq_length // 2]  # Using the label at the center of the sequence
+                    X_seq = song_features[i : i + self.seq_length, :]
+                    y_seq = song_labels[
+                        i + self.seq_length // 2
+                    ]  # Using the label at the center of the sequence
                     X_sequences.append(X_seq)
                     y_sequences.append(y_seq)
 
@@ -213,7 +231,9 @@ class MirDataProcessor:
         train_loader = DataLoader(
             train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
         )
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
+        test_loader = DataLoader(
+            test_dataset, batch_size=self.batch_size, num_workers=0
+        )
 
         print("Data loaders are ready for training and testing.")
         return train_loader, test_loader, num_classes
