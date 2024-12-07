@@ -1,4 +1,5 @@
 import os
+import copy
 import json
 import wave
 import numpy as np
@@ -22,22 +23,55 @@ C0 = 12
 NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
 CHORDS = {
+    "1/1": [0],
     "5": [0, 7],
     "maj": [0, 4, 7],
+    "maj/2": [0, 4, 7, -10],
+    "maj/4": [0, 4, 7, -7],
+    "maj(9)": [0, 4, 7, 14],
     "min": [0, 3, 7],
+    "min/2": [0, -9, 7],
+    "min/4": [0, 3, -5],
+    "min(9)": [0, 3, 7, 14],
     "dim": [0, 3, 6],
     "aug": [0, 4, 8],
     "sus2": [0, 2, 7],
     "sus4": [0, 5, 7],
+    "sus4(b7)": [0, 5, 7, 10],
+    "sus4(9)": [0, 5, 7, 14],
+    "sus4(b7,9)": [0, 5, 7, 10, 14],
+    "maj6": [0, 4, 7, 9],
+    "maj6(9)": [0, 4, 7, 9, 14],
     "maj7": [0, 4, 7, 11],
+    "min6": [0, 3, 7, 9],
     "min7": [0, 3, 7, 10],
+    "minmaj7": [0, 3, 7, 11],
     "7": [0, 4, 7, 10],
-    "m7b5": [0, 3, 6, 10],
+    "hdim7": [0, 3, 6, 10],
     "dim7": [0, 3, 6, 9],
     "maj9": [0, 4, 7, 11, 14],
     "min9": [0, 3, 7, 10, 14],
     "9": [0, 4, 7, 10, 14],
-    "7b9": [0, 4, 7, 10, 13]
+    "7(#9)": [0, 4, 7, 10, 15],
+    "11": [[0, 4, 7, 10, 14, 17]],
+    "min11": [0, 3, 7, 10, 14, 17],
+    "13": [[0, 4, 7, 10, 14, 17, 21]],
+}
+
+INVERSIONS = {
+    "maj/3": [0, -8, 7],
+    "maj/5": [0, 4, -5],
+    "min/b3": [0, -9, 7],
+    "min/5": [0, 3, -5],
+    "maj7/3": [0, -8, 7, 11],
+    "maj7/5": [0, 4, -5, 11],
+    "maj7/7": [0, 4, 7, -1],
+    "min7/b3": [0, -9, 7, 10],
+    "min7/5": [0, 3, -5, 10],
+    "min7/b7": [0, 3, 7, -2],
+    "7/3": [0, -8, 7, 10],
+    "7/5": [0, 4, -5, 10],
+    "7/b7": [0, 4, 7, -2]
 }
 
 GM_INSTRUMENTS = {
@@ -139,7 +173,7 @@ GM_INSTRUMENTS = {
     114: "steel_drums",
 }
 
-def generate_all_chords(out_dir, download_sf2, start_octave:int=4, end_octave:int=4, duration=2.0, make_dir=False):
+def generate_all_chords(out_dir, download_sf2, inversions, start_octave:int=4, end_octave:int=4, duration=2.0, make_dir=False):
     """
     Generates .wav files for all defined chords using all available SoundFonts.
     Also saves chord_ref.json lookup table with metadata.
@@ -154,6 +188,9 @@ def generate_all_chords(out_dir, download_sf2, start_octave:int=4, end_octave:in
     Returns:
         None
     """
+    chord_definitions = copy.deepcopy(CHORDS)
+    if inversions:
+        chord_definitions.update(INVERSIONS)
     base_path = Path(out_dir)
     if make_dir:
         base_path.mkdir(parents=True, exist_ok=True)
@@ -172,7 +209,7 @@ def generate_all_chords(out_dir, download_sf2, start_octave:int=4, end_octave:in
     for octave in range(start_octave, end_octave+1):
         for i in range(12):
             root = C0 + octave * 12 + i
-            for chord_class, intervals in CHORDS.items():
+            for chord_class, intervals in chord_definitions.items():
                 midi = __generate_midi_chord(root, intervals)
                 note_name = __note_lookup(root)
                 mid_filename = f"{note_name}{chord_class}_O{octave}"
