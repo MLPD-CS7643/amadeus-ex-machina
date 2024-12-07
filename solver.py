@@ -10,9 +10,22 @@ from torch.utils.data import DataLoader
 
 class Solver:
     def __init__(
-            self, model, optimizer, criterion, scheduler, train_dataloader: DataLoader, valid_dataloader: DataLoader,
-            batch_size, epochs, device='cpu', direction='minimize', early_stop_epochs=0, warmup_epochs=0,
-            dtype='float16', optuna_prune=False, **kwargs
+        self,
+        model,
+        optimizer,
+        criterion,
+        scheduler,
+        train_dataloader: DataLoader,
+        valid_dataloader: DataLoader,
+        batch_size,
+        epochs,
+        device="cpu",
+        direction="minimize",
+        early_stop_epochs=0,
+        warmup_epochs=0,
+        dtype="float16",
+        optuna_prune=False,
+        **kwargs,
     ):
         self.device = device
         self.dtype = dtype
@@ -25,8 +38,9 @@ class Solver:
         self.optuna_prune = optuna_prune
         self.direction = direction  # direction to optimize loss function, not used atm but needed for griddy
 
-        self.train_dataloader = DataLoader(train_dataloader.dataset, batch_size=self.batch_size,
-                                           shuffle=True)  # workaround to allow griddy of batch_size
+        self.train_dataloader = DataLoader(
+            train_dataloader.dataset, batch_size=self.batch_size, shuffle=True
+        )  # workaround to allow griddy of batch_size
         self.valid_dataloader = valid_dataloader
 
         self.model = model.to(self.device)
@@ -39,7 +53,7 @@ class Solver:
         # elif self.dtype == 'bfloat16':
         #     self.model = self.model.bfloat16()
 
-        self.base_lr = optimizer.param_groups[0]['lr']
+        self.base_lr = optimizer.param_groups[0]["lr"]
         self.train_accuracy_history = []
         self.valid_accuracy_history = []
         self.train_loss_history = []
@@ -92,7 +106,7 @@ class Solver:
         valid_loader = self.valid_dataloader
 
         no_improve = 0
-        best_loss = float('inf')
+        best_loss = float("inf")
         best_val_accuracy = 0
         for epoch_idx in range(self.epochs):
             print("-----------------------------------")
@@ -169,12 +183,16 @@ class Solver:
             # Optuna injection
             if trial:
                 trial.report(val_loss, epoch_idx + 1)
-                trial.set_user_attr(f'train_loss_epoch_{epoch_idx + 1}', avg_train_loss)
-                trial.set_user_attr(f'val_loss_epoch_{epoch_idx + 1}', avg_val_loss)
-                trial.set_user_attr(f'train_acc_epoch_{epoch_idx + 1}', train_accuracy)
-                trial.set_user_attr(f'val_acc_epoch_{epoch_idx + 1}', val_accuracy)
+                trial.set_user_attr(f"train_loss_epoch_{epoch_idx + 1}", avg_train_loss)
+                trial.set_user_attr(f"val_loss_epoch_{epoch_idx + 1}", avg_val_loss)
+                trial.set_user_attr(f"train_acc_epoch_{epoch_idx + 1}", train_accuracy)
+                trial.set_user_attr(f"val_acc_epoch_{epoch_idx + 1}", val_accuracy)
                 if self.optuna_prune and trial.should_prune():
-                    print("OPTUNA PRUNED E:{} L:{:.4f}".format(epoch_idx + 1, avg_val_loss))
+                    print(
+                        "OPTUNA PRUNED E:{} L:{:.4f}".format(
+                            epoch_idx + 1, avg_val_loss
+                        )
+                    )
                     raise optuna.exceptions.TrialPruned()
 
             if self.early_stop_epochs > 0:
@@ -184,7 +202,11 @@ class Solver:
                 else:
                     no_improve += 1
                     if no_improve >= self.early_stop_epochs:
-                        print("EARLY STOP E:{} L:{:.4f}".format(epoch_idx + 1, avg_val_loss))
+                        print(
+                            "EARLY STOP E:{} L:{:.4f}".format(
+                                epoch_idx + 1, avg_val_loss
+                            )
+                        )
                         break
 
         if plot_results:
@@ -194,7 +216,7 @@ class Solver:
         """Adjusts the learning rate according to the epoch during the warmup phase."""
         lr = self.base_lr * (epoch / self.warmup_epochs)  # Linear warm-up
         for param_group in self.optimizer.param_groups:
-            param_group['lr'] = lr
+            param_group["lr"] = lr
 
     def plot_curves(self, file_prefix):
         epochs = [i + 1 for i in range(len(self.train_accuracy_history))]
@@ -217,12 +239,8 @@ class Solver:
 
         # Plot loss curves
         plt.figure(figsize=(8, 6))
-        plt.plot(
-            epochs, self.train_loss_history, marker="o", label="Training Loss"
-        )
-        plt.plot(
-            epochs, self.valid_loss_history, marker="s", label="Validation Loss"
-        )
+        plt.plot(epochs, self.train_loss_history, marker="o", label="Training Loss")
+        plt.plot(epochs, self.valid_loss_history, marker="s", label="Validation Loss")
         plt.title("Loss Curve")
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
