@@ -23,7 +23,7 @@ C0 = 12
 NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
 CHORDS = {
-    "1/1": [0],
+    "1": [0],
     "5": [0, 7],
     "maj": [0, 4, 7],
     "maj/2": [0, 4, 7, -10],
@@ -53,9 +53,9 @@ CHORDS = {
     "min9": [0, 3, 7, 10, 14],
     "9": [0, 4, 7, 10, 14],
     "7(#9)": [0, 4, 7, 10, 15],
-    "11": [[0, 4, 7, 10, 14, 17]],
+    "11": [0, 4, 7, 10, 14, 17],
     "min11": [0, 3, 7, 10, 14, 17],
-    "13": [[0, 4, 7, 10, 14, 17, 21]],
+    "13": [0, 4, 7, 10, 14, 17, 21],
 }
 
 INVERSIONS = {
@@ -212,7 +212,7 @@ def generate_all_chords(out_dir, download_sf2, inversions, start_octave:int=4, e
             for chord_class, intervals in chord_definitions.items():
                 midi = __generate_midi_chord(root, intervals)
                 note_name = __note_lookup(root)
-                mid_filename = f"{note_name}{chord_class}_O{octave}"
+                mid_filename = f"{note_name}{chord_class.replace('/','inv')}_O{octave}"
                 mid_filepath = wav_dir / f"{mid_filename}.mid"
                 midi.save(mid_filepath)
                 for preset_id, instrument_name in GM_INSTRUMENTS.items():
