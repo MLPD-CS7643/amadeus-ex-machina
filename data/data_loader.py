@@ -1,11 +1,9 @@
 from pathlib import Path
 import pickle
-<<<<<<< HEAD
 
 import mirdata.datasets
 import mirdata.datasets.guitarset
-=======
->>>>>>> 59f8b668665ff3ad5cdf6bcf7650a48fd4cd3bc2
+
 import pandas as pd
 import mir_eval
 import mirdata
