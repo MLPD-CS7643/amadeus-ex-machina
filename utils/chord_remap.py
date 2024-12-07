@@ -21,6 +21,7 @@ FLAT_TO_SHARP = {
 }
 
 REMAP = {
+    "1/1": "1",
     "maj/7": "maj7/7",
     "maj/b7": "7/b7",
     "min/b7": "min7/b7",
