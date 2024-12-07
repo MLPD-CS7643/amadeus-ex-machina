@@ -1,6 +1,8 @@
 from pathlib import Path
 import pickle
 
+import mirdata.datasets
+import mirdata.datasets.guitarset
 import pandas as pd
 import mirdata
 import mir_eval
@@ -80,6 +82,49 @@ class MirDataProcessor:
             )
 
             data_with_labels = np.hstack((chroma_array, labels_at_times.reshape(-1, 1)))
+
+            segment_df = pd.DataFrame(data_with_labels)
+            segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
+
+            print(f"Processed track {track_id} and appended data to combined CSV.")
+
+        print(f"All data processed and saved to {combined_csv_path}")
+
+    def process_wav_data(self, max_tracks=50):
+        """Processes the raw wav data and creates a combined CSV file for training."""
+        combined_csv_path = self.combined_csv_path
+
+        if combined_csv_path.exists():
+            combined_csv_path.unlink()
+
+        track_ids = self.dataset.track_ids
+        print(f"Found {len(track_ids)} tracks in the dataset.")
+
+        num_tracks = 0
+        for track_id in track_ids:
+            if num_tracks == max_tracks:
+                break
+            num_tracks += 1
+            track = self.dataset.track(track_id)
+
+            wav, sample_rate = track.audio_mix
+
+            chord_data = mirdata.datasets.guitarset.load_chords(track.jams_path, True)
+
+            chord_intervals = chord_data.intervals
+            chord_labels = chord_data.labels
+
+            timestamps = range(len(wav))
+
+            # Use mir_eval to get the chord labels at the chroma timestamps
+            # This function maps each timestamp to the corresponding chord label
+            labels_at_times = np.array(
+                mir_eval.util.interpolate_intervals(
+                    chord_intervals, chord_labels, timestamps, fill_value="N"
+                )
+            )
+
+            data_with_labels = np.column_stack((wav, labels_at_times))
 
             segment_df = pd.DataFrame(data_with_labels)
             segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
