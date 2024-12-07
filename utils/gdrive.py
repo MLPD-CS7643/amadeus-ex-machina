@@ -1,6 +1,7 @@
 import json
 import os
 import gdown
+from pathlib import Path
 
 
 ID_LOOKUP_FILE = "secrets/gdrive.json" 
@@ -27,7 +28,8 @@ def download_folder_from_gdrive(target, destination):
     gdown.download_folder(id=id, output=destination)
 
 def __lookup_file_id(target):
-    with open(ID_LOOKUP_FILE, 'r') as file:
+    json_path = Path(__file__).parents[1] / ID_LOOKUP_FILE
+    with open(json_path, 'r') as file:
         lookup = json.load(file)
         if target not in lookup:
             print(f"<{target}> not found in gdrive.")
