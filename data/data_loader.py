@@ -1,6 +1,5 @@
 from pathlib import Path
 import pickle
-
 import pandas as pd
 import mir_eval
 import mirdata
@@ -9,6 +8,7 @@ from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
+from utils.chord_remap import remap_chord_label, CullMode
 
 
 class MirDataProcessor:
@@ -34,7 +34,7 @@ class MirDataProcessor:
         if download:
             self.dataset.download(cleanup=True, force_overwrite=True)
 
-    def process_data(self):
+    def process_billboard_data(self, cull_mode=CullMode.REMAP):
         """Processes the raw data and creates a combined CSV file for training."""
         combined_csv_path = self.combined_csv_path
 
@@ -70,6 +70,12 @@ class MirDataProcessor:
 
             chord_intervals = chord_data.intervals
             chord_labels = chord_data.labels
+            for chord_label in chord_labels:
+                remapped_root, remapped_chord_class = remap_chord_label(chord_label, cull_mode)
+                if remapped_root == 'N':
+                    chord_label = 'N'
+                else:
+                    chord_label = f'{remapped_root}:{remapped_chord_class}'
 
             # Use mir_eval to get the chord labels at the chroma timestamps
             # This function maps each timestamp to the corresponding chord label
