@@ -20,6 +20,7 @@ class MirDataProcessor:
         batch_size=64,
         seq_length=16,
         process_sequential=False,
+        overlap_sequence=False,
     ):
         """
         Encapsulates utilities for downloading publicly available MIR datasets and preprocessing them to be
@@ -29,12 +30,16 @@ class MirDataProcessor:
         :param batch_size: batch used utilized by the pytorch dataloaders
         :param seq_length: length of sequences projected in sequential data processing
         :param process_sequential: flag to determine whether to process the data as sequential or tabular data
+        :param overlap_sequence: flag to determine whether sequences can overlap or not
         """
         self.raw_data_dir = Path(__file__).parent / "raw"
-        self.processed_data_dir = Path(output_dir) if output_dir else Path(__file__).parent / "processed"
+        self.processed_data_dir = (
+            Path(output_dir) if output_dir else Path(__file__).parent / "processed"
+        )
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.process_sequential = process_sequential
+        self.overlap_sequence = overlap_sequence
 
         # Define file paths
         self.combined_csv_path = self.processed_data_dir / "combined_data.csv"
@@ -169,33 +174,78 @@ class MirDataProcessor:
             y_sequences = []
 
             print("Creating sequences of chromagram data within song boundaries...")
-            # Group data by song_id
             unique_song_ids = np.unique(song_ids)
 
             for song_id in unique_song_ids:
-                # Get indices for this song
                 song_indices = np.where(song_ids == song_id)[0]
-                song_features = prepped_features[song_indices]
+                song_features = prepped_features[song_indices, :]
                 song_labels = prepped_labels[song_indices]
 
-                num_samples = song_features.shape[0] - self.seq_length + 1
+                if self.overlap_sequence:
+                    num_samples = song_features.shape[0] - self.seq_length + 1
 
-                if num_samples <= 0:
-                    print(
-                        f"Song {song_id} has insufficient data for the given sequence length, skipping."
+                    if num_samples <= 0:
+                        print(
+                            f"Song {song_id} has insufficient data for the given sequence length, skipping."
+                        )
+                        continue
+
+                    for i in range(num_samples):
+                        X_seq = song_features[i : i + self.seq_length, :]
+                        y_seq = song_labels[
+                            i + self.seq_length // 2
+                        ]  # Using the label at the center of the sequence
+                        X_sequences.append(X_seq)
+                        y_sequences.append(y_seq)
+                else:
+                    # Calculate how many full sequences we can get
+                    num_instances = song_features.shape[0]
+                    remainder = num_instances % self.seq_length
+                    pad_amount = 0 if remainder == 0 else (self.seq_length - remainder)
+
+                    if pad_amount > 0:
+                        song_features = np.pad(
+                            song_features, ((0, pad_amount), (0, 0)), mode="constant"
+                        )
+                        song_labels = np.pad(
+                            song_labels,
+                            (0, pad_amount),
+                            mode="constant",
+                            constant_values=song_labels[-1],
+                        )
+
+                    num_instances_padded = song_features.shape[0]
+                    num_samples = num_instances_padded // self.seq_length
+
+                    if num_samples <= 0:
+                        print(
+                            f"Song {song_id} has insufficient data for seq_length {self.seq_length}, skipping."
+                        )
+                        continue
+
+                    input_dim = song_features.shape[1]
+                    track_X_seqs = song_features.reshape(
+                        (num_samples, self.seq_length, input_dim)
                     )
-                    continue
 
-                for i in range(num_samples):
-                    X_seq = song_features[i : i + self.seq_length, :]
-                    y_seq = song_labels[
-                        i + self.seq_length // 2
-                    ]  # Using the label at the center of the sequence
-                    X_sequences.append(X_seq)
-                    y_sequences.append(y_seq)
+                    track_y_seqs = song_labels.reshape((num_samples, self.seq_length))
+                    track_y_seqs = track_y_seqs[:, self.seq_length // 2]  # center label
 
-            prepped_features = np.array(X_sequences)
-            prepped_labels = np.array(y_sequences)
+                    X_sequences.append(track_X_seqs)
+                    y_sequences.append(track_y_seqs)
+
+            if self.overlap_sequence:
+                prepped_features = np.array(X_sequences)
+                prepped_labels = np.array(y_sequences)
+            else:
+                # Concatenate all sequences from all songs
+                X_sequences = np.concatenate(
+                    X_sequences, axis=0
+                )  # (N, seq_length, input_dim)
+                y_sequences = np.concatenate(y_sequences, axis=0)  # (N,)
+
+                prepped_features = X_sequences
+                prepped_labels = y_sequences
 
         # Split data into training and testing sets
         print("Splitting data into training and testing sets...")
@@ -232,7 +282,9 @@ class MirDataProcessor:
         train_loader = DataLoader(
             train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
         )
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
+        test_loader = DataLoader(
+            test_dataset, batch_size=self.batch_size, num_workers=0
+        )
 
         print("Data loaders are ready for training and testing.")
         return train_loader, test_loader, num_classes
