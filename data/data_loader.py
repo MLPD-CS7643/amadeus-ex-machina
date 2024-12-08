@@ -188,6 +188,13 @@ class MirDataProcessor:
 
                 if self.overlap_sequence:
                     num_samples = song_features.shape[0] - self.seq_length + 1
+
+                    if num_samples <= 0:
+                        print(
+                            f"Song {song_id} has insufficient data for seq_length {self.seq_length}, skipping."
+                        )
+                        continue
+                    
                     for i in range(num_samples):
                         X_seq = song_features[i : i + self.seq_length, :]
                         y_seq = song_labels[
@@ -228,9 +235,7 @@ class MirDataProcessor:
 
                     track_y_seqs = song_labels.reshape((num_samples, self.seq_length))
                     if self.use_median:
-                        track_y_seqs = track_y_seqs[
-                            :, self.seq_length // 2
-                        ]  # center label
+                        track_y_seqs = track_y_seqs[:, self.seq_length // 2]  # center label
                         y_sequences.append(track_y_seqs)
                     # Use mode otherwise
                     else:
