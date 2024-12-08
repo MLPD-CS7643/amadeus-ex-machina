@@ -287,7 +287,51 @@ class TorchFXGenerator:
                     
             yield fx_chain, fx_params, fx_preset_names
 
+    def process_single_effect_samples(self, output_dir: Path, target_db: float = -1.0, limit: bool = False):
+        """Process all audio files with each effect applied separately with a random preset."""
+        output_dir.mkdir(parents=True, exist_ok=True)
+        #clear metadata
+        self.fx_metadata = {}
+        
+        for original_key in self.metadata.keys():
+            print(f"Processing {original_key} with individual effects")
+            
+            audio_path = str(self.audio_files[original_key])
+            waveform, sr = torchaudio.load(audio_path)
+            
+            # Convert stereo to mono if necessary
+            if waveform.shape[0] > 1:
+                waveform = torch.mean(waveform, dim=0)
+
+            # Process each effect separately
+            for fx in self.available_fx:
+                presets = list(self.fx_presets[fx].keys())
+                if presets:  # Ensure there are presets available
+                    random_preset = random.choice(presets)
+                    fx_params = {fx: self.fx_presets[fx][random_preset]}
+                    
+                    processed = self._process_audio(waveform, sr, [fx], fx_params)
+                    processed = self._normalize_batch(processed, target_db)
+                    
+                    # Update metadata and save audio file
+                    new_key = self._update_metadata(original_key, [fx], fx_params, {fx: random_preset})
+                    output_path = output_dir / f"{new_key}.mp3"
+                    torchaudio.save(
+                        str(output_path),
+                        processed.unsqueeze(0).to(torch.float32),
+                        sr,
+                        format="mp3",
+                        compression=BITRATE/1000
+                    )
+            if limit:
+                break
+                    
+        # Optionally, save metadata for all processed samples
+        self._save_metadata(output_dir.parent / "fx_individual_chord_ref.json")
+
     def _save_metadata(self, path: Path):
         """Save FX metadata to JSON file."""
         with open(path, 'w') as f:
             json.dump(self.fx_metadata, f)
+        #clear metadata
+        self.fx_metadata = {}
