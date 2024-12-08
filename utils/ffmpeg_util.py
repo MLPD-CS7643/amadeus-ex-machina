@@ -5,7 +5,7 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 from tqdm_joblib import tqdm_joblib
 
-FFMPEG_PATH = Path(__file__).parents[1] / 'lib' / 'ffmpeg' / 'bin' / 'ffmpeg.exe'
+FFMPEG_PATH = Path(__file__).parents[1] / 'bin' / 'ffmpeg' / 'ffmpeg.exe'
 
 def convert_audio(input_file, output_folder, output_format):
     """Convert an audio file to a specified format using ffmpeg called via subprocess."""
