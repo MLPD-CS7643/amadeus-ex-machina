@@ -2,13 +2,9 @@ import os
 import copy
 import inspect
 import optuna
-from enum import Enum, auto
+from enum import Enum
+from solver import TrialMetric
 
-
-class TrialMetric(Enum):
-    LOSS = auto()
-    ACCURACY = auto()
-    # add more as needed
 
 class SearchMethod(Enum):
     """
@@ -16,9 +12,9 @@ class SearchMethod(Enum):
     UNIFORM - find value between two floats, ex: [1.0, 4.0]
     LOG_UNIFORM - same but log-scaled, ex: [0.001, 0.1]
     """
-    CATEGORICAL = auto()
-    UNIFORM = auto()
-    LOG_UNIFORM = auto()
+    CATEGORICAL = 0
+    UNIFORM = 1
+    LOG_UNIFORM = 2
 
 def hit_griddy(study_name, param_set, out_dir, trial_metric:TrialMetric, n_trials, n_jobs, prune, resume):
     """
@@ -61,7 +57,7 @@ def __create_objective(param_set, save_dir, prune, trial_metric):
         optimizer = __instantiate_class_with_trial_params(trial, 'optim', copy.deepcopy(param_set), pass_through_kwargs={'params': model.parameters()})
         scheduler = __instantiate_class_with_trial_params(trial, 'sched', copy.deepcopy(param_set), pass_through_kwargs={'optimizer': optimizer})
         criterion = __instantiate_class_with_trial_params(trial, 'criterion', copy.deepcopy(param_set))
-        solver:Solver = __instantiate_class_with_trial_params(trial, 'solver', copy.deepcopy(param_set), enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion, 'optuna_prune': prune})
+        solver = __instantiate_class_with_trial_params(trial, 'solver', copy.deepcopy(param_set), enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion, 'optuna_prune': prune})
         best_metric = solver.train_and_evaluate(trial, trial_metric=trial_metric)
         #if len(trial.study.trials_dataframe().dropna(subset=['value'])) > 0 and trial.study.best_trial.number == trial.number:
         #    torch.save(solver.best_model, Path(save_dir) / f'{solver.best_model.__class__.__name__}_best_model.pth')
