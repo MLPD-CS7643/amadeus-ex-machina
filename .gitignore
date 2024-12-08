@@ -59,6 +59,9 @@ data/raw/
 data/processed/
 datagen/chords/
 datagen/sf2/
+*.zip
+*.pkl
+*.csv
 
 # Secrets
 secrets/
