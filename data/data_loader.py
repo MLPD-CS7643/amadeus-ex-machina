@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 from utils.chord_remap import remap_chord_label, CullMode
+import json
 
 
 class MirDataProcessor:
@@ -212,7 +213,6 @@ class MirDataProcessor:
 
         # Determine the number of classes
         num_classes = len(self.label_encoder.classes_)
-        print(f"Number of classes determined: {num_classes}")
 
         # Convert to PyTorch tensors
         X_train_tensor = torch.tensor(X_train, dtype=torch.float32, device=device)
@@ -251,3 +251,144 @@ class MirDataProcessor:
             for _, row in valid_data.iterrows()
         }
         return song_metadata
+    
+
+class ChordDataProcessor:
+    def __init__(self, chord_json_path, batch_size=64, seq_length=16, device="cpu", process_sequential=False):
+        """
+        Processes the chord data from a JSON file and prepares DataLoaders for training/testing.
+
+        Args:
+            chord_json_path (str): Path to the JSON file containing chord data.
+            batch_size (int): Batch size for DataLoaders.
+            seq_length (int): Sequence length for sequential data processing.
+            process_sequential (bool): Whether to process the data as sequential or tabular.
+        """
+        self.chord_json_path = Path(chord_json_path)
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.process_sequential = process_sequential
+
+        self.device = device
+
+        # Scaler and label encoder
+        self.scaler = MinMaxScaler()
+        self.label_encoder = LabelEncoder()
+
+        # Processed data placeholders
+        self.features = None
+        self.labels = None
+
+    def load_chord_data(self):
+        """Loads chord data from the JSON file and extracts features/labels."""
+        with open(self.chord_json_path, "r") as f:
+            chord_data = json.load(f)
+
+        features = []
+        labels = []
+
+        for key, value in chord_data.items():
+            # Extract features (e.g., duration, sample rate, etc.) and labels (e.g., chord class)
+            feature_vector = [
+                value["octave"],
+                value["gm_preset_id"],
+                value["duration(s)"],
+                value["sample_rate"],
+                value["bit_depth"],
+            ]
+            label = value["chord_class"]  # Use chord class as the label
+            features.append(feature_vector)
+            labels.append(label)
+
+        self.features = np.array(features)
+        self.labels = np.array(labels)
+
+    def preprocess_data(self):
+        """Scales features and encodes labels."""
+        print("Scaling features using MinMaxScaler...")
+        self.features = self.scaler.fit_transform(self.features)
+
+        print("Encoding labels using LabelEncoder...")
+        self.labels = self.label_encoder.fit_transform(self.labels)
+
+    def prepare_data(self):
+        """Prepares features and labels for sequential or tabular processing."""
+        if self.process_sequential:
+            print("Processing data as sequential data...")
+            X_sequences, y_sequences = [], []
+
+            num_samples = len(self.features) - self.seq_length + 1
+            if num_samples <= 0:
+                raise ValueError("Not enough data for the given sequence length.")
+
+            for i in range(num_samples):
+                X_seq = self.features[i : i + self.seq_length]
+                y_seq = self.labels[i + self.seq_length // 2]  # Label at the center of the sequence
+                X_sequences.append(X_seq)
+                y_sequences.append(y_seq)
+
+            self.features = np.array(X_sequences)
+            self.labels = np.array(y_sequences)
+        else:
+            print("Processing data as tabular data...")
+
+    def build_data_loaders(self, test_size=0.2, random_state=42):
+        """
+        Splits the data into training/testing sets and creates DataLoaders.
+
+        Args:
+            test_size (float): Proportion of the data to use as the test set.
+            random_state (int): Random seed for reproducibility.
+            device (str): Device to load data onto ('cuda' or 'cpu').
+
+        Returns:
+            train_loader (DataLoader): DataLoader for training data.
+            test_loader (DataLoader): DataLoader for testing data.
+            num_classes (int): Number of unique classes.
+        """
+        X_train, X_test, y_train, y_test = train_test_split(
+            self.features, self.labels, test_size=test_size, random_state=random_state
+        )
+
+        # Determine the number of classes
+        num_classes = len(self.label_encoder.classes_)
+
+        # Convert to PyTorch tensors
+        X_train_tensor = torch.tensor(X_train, dtype=torch.float32, device=self.device)
+        y_train_tensor = torch.tensor(y_train, dtype=torch.long, device=self.device)
+
+        X_test_tensor = torch.tensor(X_test, dtype=torch.float32, device=self.device)
+        y_test_tensor = torch.tensor(y_test, dtype=torch.long, device=self.device)
+
+        # Create TensorDatasets
+        print("Creating TensorDatasets for training and testing data...")
+        train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+        test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+
+        # Create DataLoaders
+        print("Creating DataLoaders for training and testing datasets...")
+        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
+
+        print("DataLoaders are ready for training and testing.")
+        return train_loader, test_loader, num_classes
+
+    def process_all_and_build_loaders(self, test_size=0.2, random_state=42):
+        """
+        Combines loading, preprocessing, and preparing data, and returns DataLoaders.
+
+        Args:
+            test_size (float): Proportion of the data to use as the test set.
+            random_state (int): Random seed for reproducibility.
+            device (str): Device to load data onto ('cuda' or 'cpu').
+
+        Returns:
+            train_loader (DataLoader): DataLoader for training data.
+            test_loader (DataLoader): DataLoader for testing data.
+            num_classes (int): Number of unique classes.
+        """
+        print("Starting full processing pipeline...")
+        self.load_chord_data()
+        self.preprocess_data()
+        self.prepare_data()
+        return self.build_data_loaders(test_size=test_size, random_state=random_state)
