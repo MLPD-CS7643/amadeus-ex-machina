@@ -3,11 +3,16 @@ import copy
 import torch
 import optuna
 import matplotlib.pyplot as plt
+from enum import Enum
 from pathlib import Path
 from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
-from griddy.griddy_tuna import TrialMetric
 
+
+class TrialMetric(Enum):
+    LOSS = 0
+    ACCURACY = 1
+    # add more as needed
 
 class Solver:
     def __init__(
