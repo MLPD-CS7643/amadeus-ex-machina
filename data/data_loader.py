@@ -130,7 +130,7 @@ class MirDataProcessor:
 
         print(f"All data processed and saved to {combined_csv_path}")
 
-    def process_wav_data(self, max_tracks=50):
+    def process_wav_data(self, max_tracks=None):
         """Processes the raw wav data and creates a combined CSV file for training."""
         combined_csv_path = self.combined_csv_path
 
@@ -142,8 +142,9 @@ class MirDataProcessor:
 
         num_tracks = 0
         for track_id in track_ids:
-            if num_tracks == max_tracks:
-                break
+            if max_tracks is not None:
+                if num_tracks == max_tracks:
+                    break
             num_tracks += 1
             track = self.dataset.track(track_id)
 
@@ -251,9 +252,14 @@ class MirDataProcessor:
 
         # Split data into training and testing sets
         print("Splitting data into training and testing sets...")
-        X_train, X_test, y_train, y_test = train_test_split(
-            prepped_features, prepped_labels, test_size=0.2, random_state=42
-        )
+        if self.process_sequential:
+            X_train, X_test, y_train, y_test = train_test_split(
+                prepped_features, prepped_labels, test_size=0.05, shuffle=False
+            )
+        else:
+            X_train, X_test, y_train, y_test = train_test_split(
+                prepped_features, prepped_labels, test_size=0.2, random_state=42
+            )
 
         print("Data preparation complete.")
         return X_train, X_test, y_train, y_test
@@ -282,7 +288,7 @@ class MirDataProcessor:
         # Create data loaders
         print("Creating DataLoaders for training and testing datasets...")
         train_loader = DataLoader(
-            train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
+            train_dataset, batch_size=self.batch_size, shuffle=False, num_workers=0
         )
         test_loader = DataLoader(
             test_dataset, batch_size=self.batch_size, num_workers=0

@@ -39,7 +39,7 @@ class Solver:
         self.direction = direction  # direction to optimize loss function, not used atm but needed for griddy
 
         self.train_dataloader = DataLoader(
-            train_dataloader.dataset, batch_size=self.batch_size, shuffle=True
+            train_dataloader.dataset, batch_size=self.batch_size, shuffle=False
         )  # workaround to allow griddy of batch_size
         self.valid_dataloader = valid_dataloader
 
