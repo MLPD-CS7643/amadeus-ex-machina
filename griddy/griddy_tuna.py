@@ -1,13 +1,7 @@
 import os
 import copy
 import inspect
-import torch
 import optuna
-import torch.utils
-from collections.abc import Iterable
-from models.griddy_model import GriddyModel
-from pathlib import Path
-from solver import Solver
 from enum import Enum, auto
 
 
@@ -25,71 +19,6 @@ class SearchMethod(Enum):
     CATEGORICAL = auto()
     UNIFORM = auto()
     LOG_UNIFORM = auto()
-
-
-### EXAMPLE PARAM SETUP ###
-
-SOLVER_PARAMS = {
-    Solver : {
-        "device": "cuda",
-        "epochs": 10,
-        "early_stop_epochs": 0, # early stop after n epochs without improvement, 0 to disable
-        "warmup_epochs": 0, # 0 to disable
-        "dtype": "float16",
-        "train_dataloader": None, # assume a DataLoader object
-        "valid_dataloader": None, # assume a DataLoader object
-        "direction": "minimize" # must specify this, even if not used by solver
-    }
-}
-
-MODEL_PARAMS = {
-    GriddyModel: {
-        "n_blocks": [3],
-        "block_depth": [3],
-        "pad": [1],
-        "stride": [1],
-        "k_conv": [3],
-        "maxpool": [2],
-        "dropout": [0.2, 0.3],
-        "out_channels": [16, 32, 64, 128, SearchMethod.CATEGORICAL],
-        # "out_channels": [16, 32, 64, 128] is also valid, CATEGORICAL is assumed in this instance
-    }
-}
-
-OPTIM_PARAMS = {
-    torch.optim.SGD : {
-        "lr": [0.001, 0.1, SearchMethod.LOG_UNIFORM],
-        "momentum": [0.9, 0.99, SearchMethod.UNIFORM],
-        "weight_decay": [0.00001],
-    },
-    torch.optim.Adam : {
-        "lr": [0.03, 0.02, 0.01, 0.1],
-        "momentum": [0.98, 0.99],
-        "weight_decay": [0.00001],
-    }
-}
-
-SCHED_PARAMS = {
-    torch.optim.lr_scheduler.CosineAnnealingWarmRestarts : {
-        "T_max": [10],
-    },
-    torch.optim.lr_scheduler.StepLR : {
-        "step_size": [10, 20],
-        "gamma" : [0.1, 0.05],
-    }
-}
-
-CRITERION_PARAMS = {
-    torch.nn.CrossEntropyLoss : {}
-}
-
-PARAM_SET = {
-    "solver": SOLVER_PARAMS,
-    "model" : MODEL_PARAMS,
-    "optim" : OPTIM_PARAMS,
-    "sched" : SCHED_PARAMS,
-    "criterion" : CRITERION_PARAMS,
-}
 
 def hit_griddy(study_name, param_set, out_dir, trial_metric:TrialMetric, n_trials, n_jobs, prune, resume):
     """
