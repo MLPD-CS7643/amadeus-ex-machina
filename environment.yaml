@@ -32,3 +32,4 @@ dependencies:
       - yt_dlp
       - mir_eval
       - plotly
+      - tqdm-joblib

@@ -108,7 +108,6 @@ def hit_griddy(study_name, param_set, out_dir, trial_metric:TrialMetric, n_trial
         None
     """
     print("\"Hitting the griddy...\" -Ellie")
-
     os.makedirs(out_dir, exist_ok=True)
     full_path = os.path.join(out_dir, f"{study_name}.db")
     storage_path = f'sqlite:///{full_path}'
@@ -122,8 +121,8 @@ def hit_griddy(study_name, param_set, out_dir, trial_metric:TrialMetric, n_trial
     study = optuna.create_study(study_name=study_name, direction=__get_direction(param_set), storage=storage_path, load_if_exists=resume)
     objective = __create_objective(param_set, out_dir, prune, trial_metric)
     study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
-
     print("DONE")
+    return study
 
 def __create_objective(param_set, save_dir, prune, trial_metric):
     # optuna objective function
