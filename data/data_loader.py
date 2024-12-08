@@ -15,6 +15,7 @@ class MirDataProcessor:
     def __init__(
         self,
         download=False,
+        output_dir=None,
         dataset_name="billboard",
         batch_size=64,
         seq_length=16,

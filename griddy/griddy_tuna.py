@@ -99,6 +99,7 @@ def hit_griddy(study_name, param_set, out_dir, trial_metric:TrialMetric, n_trial
         study_name (str)
         param_set (dict): full set of params following example pattern
         out_dir: (Path or str): folder to save output
+        trial_metric: (TrialMetric) metric that optuna will use to evaluate trials
         n_trials (int): number of trials
         n_jobs (int): number of workers
         prune (bool): enable optuna pruning
