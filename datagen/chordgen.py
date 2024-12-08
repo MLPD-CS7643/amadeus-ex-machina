@@ -305,7 +305,7 @@ def __fetch_sf2_archive(path:Path):
 
 def __synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0, preset_id=0, seconds_to_generate=2.0, sample_rate=44100, bit_depth=16, gain=-3):   
     # Initialize the synthesizer and load the soundfont
-    synth = tsf.Synth(gain=-gain)
+    synth = tsf.Synth(gain=gain)
     soundfont_id = synth.sfload(soundfont_path)
     synth.program_select(instrument_id, soundfont_id, 0, preset_id)
 

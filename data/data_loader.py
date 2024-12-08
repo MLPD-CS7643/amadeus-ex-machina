@@ -19,6 +19,7 @@ class MirDataProcessor:
     def __init__(
         self,
         download=False,
+        output_dir=None,
         dataset_name="billboard",
         batch_size=64,
         seq_length=16,
@@ -34,7 +35,7 @@ class MirDataProcessor:
         :param process_sequential: flag to determine whether to process the data as sequential or tabular data
         """
         self.raw_data_dir = Path(__file__).parent / "raw"
-        self.processed_data_dir = Path(__file__).parent / "processed"
+        self.processed_data_dir = Path(output_dir) if output_dir else Path(__file__).parent / "processed"
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.process_sequential = process_sequential
@@ -290,9 +291,7 @@ class MirDataProcessor:
         train_loader = DataLoader(
             train_dataset, batch_size=self.batch_size, shuffle=False, num_workers=0
         )
-        test_loader = DataLoader(
-            test_dataset, batch_size=self.batch_size, num_workers=0
-        )
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
 
         print("Data loaders are ready for training and testing.")
         return train_loader, test_loader, num_classes

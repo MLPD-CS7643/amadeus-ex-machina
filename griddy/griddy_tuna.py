@@ -11,6 +11,11 @@ from solver import Solver
 from enum import Enum, auto
 
 
+class TrialMetric(Enum):
+    LOSS = auto()
+    ACCURACY = auto()
+    # add more as needed
+
 class SearchMethod(Enum):
     """
     CATEGORICAL - search within a defined set of values, ex: [8, 32, 128, 512]
@@ -86,7 +91,7 @@ PARAM_SET = {
     "criterion" : CRITERION_PARAMS,
 }
 
-def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
+def hit_griddy(study_name, param_set, out_dir, trial_metric:TrialMetric, n_trials, n_jobs, prune, resume):
     """
     I am addicted to hitting the griddy.
 
@@ -94,6 +99,7 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
         study_name (str)
         param_set (dict): full set of params following example pattern
         out_dir: (Path or str): folder to save output
+        trial_metric: (TrialMetric) metric that optuna will use to evaluate trials
         n_trials (int): number of trials
         n_jobs (int): number of workers
         prune (bool): enable optuna pruning
@@ -103,7 +109,6 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
         None
     """
     print("\"Hitting the griddy...\" -Ellie")
-
     os.makedirs(out_dir, exist_ok=True)
     full_path = os.path.join(out_dir, f"{study_name}.db")
     storage_path = f'sqlite:///{full_path}'
@@ -115,12 +120,12 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
             pass
 
     study = optuna.create_study(study_name=study_name, direction=__get_direction(param_set), storage=storage_path, load_if_exists=resume)
-    objective = __create_objective(param_set, out_dir, prune)
+    objective = __create_objective(param_set, out_dir, prune, trial_metric)
     study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
-
     print("DONE")
+    return study
 
-def __create_objective(param_set, save_dir, prune):
+def __create_objective(param_set, save_dir, prune, trial_metric):
     # optuna objective function
     def objective(trial):
         model = __instantiate_class_with_trial_params(trial, 'model', copy.deepcopy(param_set), enforce_single_class=True)
@@ -128,7 +133,7 @@ def __create_objective(param_set, save_dir, prune):
         scheduler = __instantiate_class_with_trial_params(trial, 'sched', copy.deepcopy(param_set), pass_through_kwargs={'optimizer': optimizer})
         criterion = __instantiate_class_with_trial_params(trial, 'criterion', copy.deepcopy(param_set))
         solver:Solver = __instantiate_class_with_trial_params(trial, 'solver', copy.deepcopy(param_set), enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion, 'optuna_prune': prune})
-        best_metric = solver.train_and_evaluate(trial)
+        best_metric = solver.train_and_evaluate(trial, trial_metric=trial_metric)
         #if len(trial.study.trials_dataframe().dropna(subset=['value'])) > 0 and trial.study.best_trial.number == trial.number:
         #    torch.save(solver.best_model, Path(save_dir) / f'{solver.best_model.__class__.__name__}_best_model.pth')
         return best_metric
@@ -167,9 +172,7 @@ def __instantiate_class_with_trial_params(trial, class_group, param_set, pass_th
     else:
         class_params = {}
     for key, values in param_group_dict[chosen_class].items():
-
         if isinstance(values, list):
-            print(values)
             if len(values) > 1:
                 if isinstance(values[-1], SearchMethod):
                     search_method = values[-1]

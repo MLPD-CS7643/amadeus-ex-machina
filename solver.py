@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
+from griddy.griddy_tuna import TrialMetric
 
 
 class Solver:
@@ -101,7 +102,7 @@ class Solver:
 
         return total_loss, avg_loss, accuracy
 
-    def train_and_evaluate(self, trial=None, plot_results=False):
+    def train_and_evaluate(self, trial=None, trial_metric=TrialMetric.LOSS, plot_results=False):
         train_loader = self.train_dataloader
         valid_loader = self.valid_dataloader
 
@@ -159,7 +160,8 @@ class Solver:
 
             if self.scheduler:
                 self.scheduler.step(avg_val_loss)
-
+            if val_loss < best_loss:
+                best_loss = val_loss
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
                 self.best_model = copy.deepcopy(self.model)
@@ -182,7 +184,11 @@ class Solver:
 
             # Optuna injection
             if trial:
-                trial.report(val_loss, epoch_idx + 1)
+                match trial_metric:
+                    case TrialMetric.LOSS:
+                        trial.report(val_loss, epoch_idx + 1)
+                    case TrialMetric.ACCURACY:
+                        trial.report(val_accuracy, epoch_idx + 1)
                 trial.set_user_attr(f"train_loss_epoch_{epoch_idx + 1}", avg_train_loss)
                 trial.set_user_attr(f"val_loss_epoch_{epoch_idx + 1}", avg_val_loss)
                 trial.set_user_attr(f"train_acc_epoch_{epoch_idx + 1}", train_accuracy)
@@ -196,21 +202,25 @@ class Solver:
                     raise optuna.exceptions.TrialPruned()
 
             if self.early_stop_epochs > 0:
-                if val_loss < best_loss:
-                    best_loss = val_loss
-                    no_improve = 0
-                else:
-                    no_improve += 1
-                    if no_improve >= self.early_stop_epochs:
-                        print(
-                            "EARLY STOP E:{} L:{:.4f}".format(
-                                epoch_idx + 1, avg_val_loss
-                            )
+                no_improve = 0
+            else:
+                no_improve += 1
+                if no_improve >= self.early_stop_epochs:
+                    print(
+                        "EARLY STOP E:{} L:{:.4f}".format(
+                            epoch_idx + 1, avg_val_loss
                         )
-                        break
+                    )
+                    break
 
         if plot_results:
             self.plot_curves(self.model.__class__.__name__)
+        
+        match trial_metric:
+            case TrialMetric.LOSS:
+                return best_loss
+            case TrialMetric.ACCURACY:
+                return best_val_accuracy
 
     def __lr_warmup(self, epoch):
         """Adjusts the learning rate according to the epoch during the warmup phase."""
