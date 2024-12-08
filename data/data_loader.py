@@ -218,8 +218,8 @@ class MirDataProcessor:
             pickle.dump(self.label_encoder, f)
 
         if self.process_sequential:
-            X_sequences = []
-            y_sequences = []
+            X_sequences = np.ndarray((0,self.seq_length))
+            y_sequences = np.ndarray((0,))
 
             print("Creating sequences of chromagram data within song boundaries...")
             # Group data by song_id
@@ -243,17 +243,8 @@ class MirDataProcessor:
                 
                 track_X_seqs = song_features.reshape((num_samples, self.seq_length))
                 track_y_seqs = song_labels.reshape((num_samples, self.seq_length))[:,self.seq_length//2]
-                X_sequences.append(track_X_seqs)
-                y_sequences.append(track_y_seqs)
-                '''
-                for i in range(num_samples):
-                    X_seq = song_features[i * self.seq_length : (i + 1) * self.seq_length, :]
-                    y_seq = song_labels[
-                        (i * self.seq_length + (i+1) * self.seq_length) // 2
-                    ]  # Using the label at the center of the sequence
-                    X_sequences.append(X_seq)
-                    y_sequences.append(y_seq)
-                '''
+                X_sequences = np.concatenate((X_sequences, track_X_seqs))
+                y_sequences = np.concatenate((y_sequences, track_y_seqs))
 
             prepped_features = np.array(X_sequences)
             prepped_labels = np.array(y_sequences)

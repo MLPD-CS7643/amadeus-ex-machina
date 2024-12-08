@@ -54,8 +54,8 @@ class FourierS2S(nn.Module):
         enc_hidden = self.mid_linear(enc_hidden)
         enc_hidden = (enc_hidden, cell)
         hidden = (enc_hidden[0][:,0,:], enc_hidden[0][:,0,:])
-        outputs = torch.zeros(tokenized.shape[-1], self.output_size).to(self.device)
-        for i in range(tokenized.shape[-1]):
+        outputs = torch.zeros(tokenized.shape[0], self.output_size).to(self.device)
+        for i in range(tokenized.shape[0]):
             current = tokenized[i,:]
             fouriers = self.strideFourier(current.unsqueeze(0)).real
             drop = self.drop(fouriers).squeeze(0)
