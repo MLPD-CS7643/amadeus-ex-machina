@@ -228,24 +228,32 @@ class MirDataProcessor:
             for song_id in unique_song_ids:
                 # Get indices for this song
                 song_indices = np.where(song_ids == song_id)[0]
-                song_features = prepped_features[song_indices]
+                song_features = prepped_features[song_indices,0]
                 song_labels = prepped_labels[song_indices]
 
-                num_samples = song_features.shape[0] - self.seq_length + 1
-
+                num_samples = song_features.shape[0] // self.seq_length + 1
+                pad_amount = self.seq_length - (song_features.shape[0] % self.seq_length)
+                song_features = np.pad(song_features, (0,pad_amount))
+                song_labels = np.pad(song_labels, (0,pad_amount))
                 if num_samples <= 0:
                     print(
                         f"Song {song_id} has insufficient data for the given sequence length, skipping."
                     )
                     continue
-
+                
+                track_X_seqs = song_features.reshape((num_samples, self.seq_length))
+                track_y_seqs = song_labels.reshape((num_samples, self.seq_length))[:,self.seq_length//2]
+                X_sequences.append(track_X_seqs)
+                y_sequences.append(track_y_seqs)
+                '''
                 for i in range(num_samples):
-                    X_seq = song_features[i : i + self.seq_length, :]
+                    X_seq = song_features[i * self.seq_length : (i + 1) * self.seq_length, :]
                     y_seq = song_labels[
-                        i + self.seq_length // 2
+                        (i * self.seq_length + (i+1) * self.seq_length) // 2
                     ]  # Using the label at the center of the sequence
                     X_sequences.append(X_seq)
                     y_sequences.append(y_seq)
+                '''
 
             prepped_features = np.array(X_sequences)
             prepped_labels = np.array(y_sequences)
