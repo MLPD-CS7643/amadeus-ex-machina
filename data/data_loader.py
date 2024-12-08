@@ -8,6 +8,8 @@ from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
+from scipy import stats
+
 from utils.chord_remap import remap_chord_label, CullMode
 
 
@@ -21,6 +23,7 @@ class MirDataProcessor:
         seq_length=16,
         process_sequential=False,
         overlap_sequence=False,
+        use_median=True,
     ):
         """
         Encapsulates utilities for downloading publicly available MIR datasets and preprocessing them to be
@@ -31,6 +34,7 @@ class MirDataProcessor:
         :param seq_length: length of sequences projected in sequential data processing
         :param process_sequential: flag to determine whether to process the data as sequential or tabular data
         :param overlap_sequence: flag to determine whether sequences can overlap or not
+        :param use_median: flag to determine whether to take the median chord annotation or mode
         """
         self.raw_data_dir = Path(__file__).parent / "raw"
         self.processed_data_dir = (
@@ -40,6 +44,7 @@ class MirDataProcessor:
         self.seq_length = seq_length
         self.process_sequential = process_sequential
         self.overlap_sequence = overlap_sequence
+        self.use_median = use_median
 
         # Define file paths
         self.combined_csv_path = self.processed_data_dir / "combined_data.csv"
@@ -183,13 +188,6 @@ class MirDataProcessor:
 
                 if self.overlap_sequence:
                     num_samples = song_features.shape[0] - self.seq_length + 1
-
-                    if num_samples <= 0:
-                        print(
-                            f"Song {song_id} has insufficient data for the given sequence length, skipping."
-                        )
-                        continue
-
                     for i in range(num_samples):
                         X_seq = song_features[i : i + self.seq_length, :]
                         y_seq = song_labels[
@@ -229,16 +227,22 @@ class MirDataProcessor:
                     )
 
                     track_y_seqs = song_labels.reshape((num_samples, self.seq_length))
-                    track_y_seqs = track_y_seqs[:, self.seq_length // 2]  # center label
+                    if self.use_median:
+                        track_y_seqs = track_y_seqs[
+                            :, self.seq_length // 2
+                        ]  # center label
+                        y_sequences.append(track_y_seqs)
+                    # Use mode otherwise
+                    else:
+                        y_modes = stats.mode(track_y_seqs, 1)
+                        y_sequences.append(y_modes[0])
 
                     X_sequences.append(track_X_seqs)
-                    y_sequences.append(track_y_seqs)
 
             if self.overlap_sequence:
                 prepped_features = np.array(X_sequences)
                 prepped_labels = np.array(y_sequences)
             else:
-                # Concatenate all sequences from all songs
                 X_sequences = np.concatenate(
                     X_sequences, axis=0
                 )  # (N, seq_length, input_dim)
