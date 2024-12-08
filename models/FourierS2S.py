@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from models import StridedFourier
+from models.StridedFourier import StridedFourier
 
 class FourierS2S(nn.Module):
 
@@ -23,38 +23,42 @@ class FourierS2S(nn.Module):
         self.token_size = token_size
         self.fourier_size = fourier_size
         self.output_size = output_size
-        self.dec_hidden = (self.token_size // fourier_size) * self.token_size
+        self.dec_hidden = dec_hidden
         self.strideFourier = StridedFourier(kernel_size, stride, fourier_size)
         self.drop = nn.Dropout(dropout)
-        self.encoder = nn.LSTM(self.fourier_size, enc_hidden)
+        self.encoder = nn.LSTM(self.fourier_size, enc_hidden, batch_first=True)
         self.mid_linear = nn.Sequential(nn.Linear(enc_hidden, enc_hidden),
                                      nn.ReLU(),
-                                     nn.Linear(enc_hidden, self.token_size),
+                                     nn.Linear(enc_hidden, dec_hidden),
                                      nn.Tanh())
         self.decoder = nn.LSTM(self.fourier_size, self.dec_hidden)
+        #self.out_linear = nn.Linear(dec_hidden, output_size)
         self.out_linear = nn.Sequential(nn.Linear(dec_hidden, output_size),
-                                    nn.LogSoftmax(dim=2))
+                                    nn.LogSoftmax(dim=0))
         
     def forward(self, input):
+        """
+        forward method for FourierS2S
+        Args:
+            input torch.Tensor((token_size), (token_size)...): chunks of wav data of size token_size in a tensor of size seq_len
+        """
         #tokenize, then pass data into encoder, then decoder with "embeddings" as the strided fourier results
-        tokenized = self.tokenize(input)
-        fouriers = self.strideFourier(tokenized.transpose(0,1)).real
+        tokenized = input.squeeze(-1)
+        fouriers = self.strideFourier(tokenized).real
         drop = self.drop(fouriers)
         enc_output, enc_hidden = self.encoder(drop)
         cell = enc_hidden[1]
         enc_hidden = enc_hidden[0]
         enc_hidden = self.mid_linear(enc_hidden)
         enc_hidden = (enc_hidden, cell)
-        current = tokenized.transpose(0,1)[0,:]
-        hidden = enc_hidden
+        hidden = (enc_hidden[0][:,0,:], enc_hidden[0][:,0,:])
         outputs = torch.zeros(tokenized.shape[-1], self.output_size)
         for i in range(tokenized.shape[-1]):
+            current = tokenized[i,:]
             fouriers = self.strideFourier(current.unsqueeze(0)).real
             drop = self.drop(fouriers).squeeze(0)
-            #TODO Fix bugs occuring related to hidden size
-            reshaped_hidden = (torch.reshape(hidden[0], (1,-1)), torch.reshape(hidden[1], (1,-1)))
-            dec_output, hidden = self.decoder(drop, reshaped_hidden)
-            output = self.out_linear(dec_output)
-            outputs[:,i] = output
-            current = torch.argmax(output)
+            #reshaped_hidden = (hidden[0].transpose(0,1), hidden[1].transpose(0,1))
+            dec_output, hidden = self.decoder(drop, hidden)
+            output = self.out_linear(dec_output[-1,:])
+            outputs[i,:] = output
         return outputs
