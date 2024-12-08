@@ -3,12 +3,17 @@ import copy
 import torch
 import optuna
 import matplotlib.pyplot as plt
+from enum import Enum
 from pathlib import Path
 from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader, Dataset, Subset
-from griddy.griddy_tuna import TrialMetric
 from sklearn.model_selection import KFold
 
+
+class TrialMetric(Enum):
+    LOSS = 0
+    ACCURACY = 1
+    # add more as needed
 
 class Solver:
     def __init__(
@@ -163,8 +168,6 @@ class Solver:
 
             if self.scheduler:
                 self.scheduler.step(avg_val_loss)
-            if val_loss < best_loss:
-                best_loss = val_loss
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
                 self.best_model = copy.deepcopy(self.model)
@@ -203,18 +206,19 @@ class Solver:
                         )
                     )
                     raise optuna.exceptions.TrialPruned()
-
-            if self.early_stop_epochs > 0:
+            if val_loss < best_loss:
+                best_loss = val_loss
                 no_improve = 0
             else:
                 no_improve += 1
-                if no_improve >= self.early_stop_epochs:
-                    print(
-                        "EARLY STOP E:{} L:{:.4f}".format(
-                            epoch_idx + 1, avg_val_loss
+                if self.early_stop_epochs > 0:
+                    if no_improve >= self.early_stop_epochs:
+                        print(
+                            "EARLY STOP E:{} L:{:.4f}".format(
+                                epoch_idx + 1, avg_val_loss
+                            )
                         )
-                    )
-                    break
+                        break
 
         if plot_results:
             self.plot_curves(self.model.__class__.__name__)
