@@ -33,3 +33,4 @@ dependencies:
       - mir_eval
       - plotly
       - tqdm-joblib
+      - mutagen
