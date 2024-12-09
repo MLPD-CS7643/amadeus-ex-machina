@@ -14,6 +14,7 @@ class TrialMetric(Enum):
     ACCURACY = 1
     # add more as needed
 
+
 class Solver:
     def __init__(
         self,
@@ -107,7 +108,9 @@ class Solver:
 
         return total_loss, avg_loss, accuracy
 
-    def train_and_evaluate(self, trial=None, trial_metric=TrialMetric.LOSS, plot_results=False):
+    def train_and_evaluate(
+        self, trial=None, trial_metric=TrialMetric.LOSS, plot_results=False
+    ):
         train_loader = self.train_dataloader
         valid_loader = self.valid_dataloader
 
@@ -219,7 +222,7 @@ class Solver:
 
         if plot_results:
             self.plot_curves(self.model.__class__.__name__)
-        
+
         match trial_metric:
             case TrialMetric.LOSS:
                 return best_loss
