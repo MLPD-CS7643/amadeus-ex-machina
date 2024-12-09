@@ -44,7 +44,7 @@ def hit_griddy(study_name, param_set, out_dir, trial_metric:TrialMetric, n_trial
         except:
             pass
 
-    study = optuna.create_study(study_name=study_name, direction=__get_direction(param_set), storage=storage_path, load_if_exists=resume)
+    study = optuna.create_study(study_name=study_name, direction='minimize' if trial_metric == TrialMetric.LOSS else 'maximize', storage=storage_path, load_if_exists=resume)
     objective = __create_objective(param_set, out_dir, prune, trial_metric)
     study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
     print("DONE")
