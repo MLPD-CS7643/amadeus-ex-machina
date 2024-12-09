@@ -102,7 +102,7 @@ def download_audio_from_youtube(query, output_path):
     return None
 
 
-def process_lab_files(base_directory):
+def process_lab_files(base_directory, start_dir, end_dir):
     """
     Traverse through folders in the base directory, process .lab files, and download audio.
 
@@ -112,39 +112,40 @@ def process_lab_files(base_directory):
     print(f"Starting to process .lab files in base directory: {base_directory}")
     for root, dirs, _ in os.walk(base_directory):
         for dir in sorted(dirs):
-            base_dir = os.path.join(root, dir)
-            for _, _, files in os.walk(base_dir):
-                for file in files:
-                    if file == "salami_chords.txt":
-                        print(f"\nEntering directory: {root}")
+            if int(dir) >= start_dir and int(dir) <= end_dir:
+                base_dir = os.path.join(root, dir)
+                for _, _, files in os.walk(base_dir):
+                    for file in files:
+                        if file == "salami_chords.txt":
+                            print(f"\nEntering directory: {dir}")
 
-                        lab_file_path = os.path.join(f"{root}{dir}", file)
-                        print(f"Processing .lab file: {lab_file_path}")
+                            lab_file_path = os.path.join(f"{root}{os.path.sep}{dir}", file)
+                            print(f"Processing .lab file: {lab_file_path}")
 
-                        # Parse the .lab file
-                        title, artist = parse_lab_file(lab_file_path)
-                        if not title or not artist:
-                            print(f"Skipping {lab_file_path} due to missing metadata.")
-                            continue
-
-                        query = f"{title} {artist}"
-                        output_mp3_path = f"{base_dir}{os.path.sep}{dir} ({artist} - {title}).mp3"
-                        print(f"Expected output path for MP3: {output_mp3_path}")
-
-                        # Check if the MP3 already exists
-                        if os.path.exists(output_mp3_path):
-                            # Check for 0-byte file
-                            if os.path.getsize(output_mp3_path) == 0:
-                                print(f"File {output_mp3_path} is 0 bytes. Deleting it.")
-                                os.remove(output_mp3_path)
-                            else:
-                                print(f"Audio file already exists: {output_mp3_path}. Skipping download.")
+                            # Parse the .lab file
+                            title, artist = parse_lab_file(lab_file_path)
+                            if not title or not artist:
+                                print(f"Skipping {lab_file_path} due to missing metadata.")
                                 continue
-                        else:
-                            print(f"Audio file does not exist: {output_mp3_path}")
 
-                        # Download audio
-                        download_audio_from_youtube(query, output_mp3_path.replace(".mp3", ""))
+                            query = f"{title} {artist}"
+                            output_mp3_path = f"{base_dir}{os.path.sep}{dir} ({artist} - {title}).mp3"
+                            print(f"Expected output path for MP3: {output_mp3_path}")
+
+                            # Check if the MP3 already exists
+                            if os.path.exists(output_mp3_path):
+                                # Check for 0-byte file
+                                if os.path.getsize(output_mp3_path) == 0:
+                                    print(f"File {output_mp3_path} is 0 bytes. Deleting it.")
+                                    os.remove(output_mp3_path)
+                                else:
+                                    print(f"Audio file already exists: {output_mp3_path}. Skipping download.")
+                                    continue
+                            else:
+                                print(f"Audio file does not exist: {output_mp3_path}")
+
+                            # Download audio
+                            download_audio_from_youtube(query, output_mp3_path.replace(".mp3", ""))
 
 
 def process_downloaded_songs(billboard_data_directory, output_path, threshold=1):
@@ -162,14 +163,14 @@ def process_downloaded_songs(billboard_data_directory, output_path, threshold=1)
     """
     print("Processing downloaded songs...")
 
-    accepted_dir = f"{output_path}accepted"
-    rejected_dir = f"{output_path}rejected"
+    accepted_dir = f"{output_path}{os.path.sep}accepted"
+    rejected_dir = f"{output_path}{os.path.sep}rejected"
     missing_mp3 = f"{rejected_dir}{os.path.sep}missing_mp3"
     zero_bytes_dir = f"{rejected_dir}{os.path.sep}zero_bytes_dir"
     missing_salami_chords_dir = f"{rejected_dir}{os.path.sep}missing_salami_chords"
     missing_salami_chords_duration_dir = f"{rejected_dir}{os.path.sep}missing_salami_chords_duration"
     duration_mismatch_dir = f"{rejected_dir}{os.path.sep}duration_mismatch"
-    processing_result_file = f"{output_path}processing_result.json"
+    processing_result_file = f"{output_path}{os.path.sep}processing_result.json"
 
     # Create output directory if it does not exist
     for dir in [accepted_dir, rejected_dir, missing_mp3, zero_bytes_dir, missing_salami_chords_dir, missing_salami_chords_duration_dir, duration_mismatch_dir]:
@@ -198,14 +199,14 @@ def process_downloaded_songs(billboard_data_directory, output_path, threshold=1)
             for _, _, files in os.walk(f"{billboard_data_directory}{os.path.sep}{dir}"):
                 for file in files:
                     if file.endswith(".mp3"):
-                        mp3_file_path = os.path.join(f"{billboard_data_directory}{dir}", file)
+                        mp3_file_path = os.path.join(f"{billboard_data_directory}{os.path.sep}{dir}", file)
                         # print(f"\nProcessing MP3 file: {mp3_file_path}")
-                        lab_file_path = os.path.join(f"{billboard_data_directory}{dir}", "salami_chords.txt")
+                        lab_file_path = os.path.join(f"{billboard_data_directory}{os.path.sep}{dir}", "salami_chords.txt")
                         # print(f"Processing lab file: {lab_file_path}")
                         if not os.path.exists(lab_file_path):
                             print(f"Skipping {mp3_file_path} due to missing salami_chords file.")
                             # copy directory to rejected folder
-                            shutil.copytree(f"{billboard_data_directory}{dir}", f"{missing_salami_chords_dir}{os.path.sep}{dir}")
+                            shutil.copytree(f"{billboard_data_directory}{os.path.sep}{dir}", f"{missing_salami_chords_dir}{os.path.sep}{dir}")
                             # create txt file in new folder directory containing reason for rejection
                             with open(f"{missing_salami_chords_dir}{os.path.sep}{dir}{os.path.sep}rejection_reason.txt", "w") as f:
                                 f.write("Missing salami chords file")
@@ -215,7 +216,7 @@ def process_downloaded_songs(billboard_data_directory, output_path, threshold=1)
                         if not os.path.exists(mp3_file_path):
                             print(f"Skipping {lab_file_path} due to missing MP3 file.")
                             # copy directory to rejected folder
-                            shutil.copytree(f"{billboard_data_directory}{dir}", f"{missing_mp3}{os.path.sep}{dir}")
+                            shutil.copytree(f"{billboard_data_directory}{os.path.sep}{dir}", f"{missing_mp3}{os.path.sep}{dir}")
                             # create txt file in new folder directory containing reason for rejection
                             with open(f"{missing_mp3}{os.path.sep}{dir}{os.path.sep}rejection_reason.txt", "w") as f:
                                 f.write("Missing mp3 file")
@@ -227,7 +228,7 @@ def process_downloaded_songs(billboard_data_directory, output_path, threshold=1)
                         if mp3_duration is None:
                             print(f"Skipping {mp3_file_path} due to missing mp3 duration.")
                             # copy directory to rejected folder
-                            shutil.copytree(f"{billboard_data_directory}{dir}", f"{zero_bytes_dir}{os.path.sep}{dir}")
+                            shutil.copytree(f"{billboard_data_directory}{os.path.sep}{dir}", f"{zero_bytes_dir}{os.path.sep}{dir}")
                             with open(f"{zero_bytes_dir}{os.path.sep}{dir}{os.path.sep}rejection_reason.txt", "w") as f:
                                 f.write("Missing duration in mp3 file (probably 0 byte file)")
                             res["rejected"]["zero_bytes"] += 1
@@ -238,7 +239,7 @@ def process_downloaded_songs(billboard_data_directory, output_path, threshold=1)
                         if lab_duration is None:
                             print(f"Skipping {mp3_file_path} due to missing .txt duration.")
                             # copy directory to rejected folder
-                            shutil.copytree(f"{billboard_data_directory}{dir}", f"{missing_salami_chords_duration_dir}{os.path.sep}{dir}")
+                            shutil.copytree(f"{billboard_data_directory}{os.path.sep}{dir}", f"{missing_salami_chords_duration_dir}{os.path.sep}{dir}")
                             with open(f"{missing_salami_chords_duration_dir}{os.path.sep}{dir}{os.path.sep}rejection_reason.txt", "w") as f:
                                 f.write("Missing duration in salami_chords file")
                             res["rejected"]["missing_salami_chords_duration"] += 1
@@ -248,14 +249,14 @@ def process_downloaded_songs(billboard_data_directory, output_path, threshold=1)
                         if abs(mp3_duration - lab_duration) > threshold:
                             print(f"Skipping {mp3_file_path} due to duration mismatch: {round(abs(mp3_duration-lab_duration), 3)}s difference")
                             # copy directory to rejected folder
-                            shutil.copytree(f"{billboard_data_directory}{dir}", f"{duration_mismatch_dir}{os.path.sep}{dir}")
+                            shutil.copytree(f"{billboard_data_directory}{os.path.sep}{dir}", f"{duration_mismatch_dir}{os.path.sep}{dir}")
                             with open(f"{duration_mismatch_dir}{os.path.sep}{dir}{os.path.sep}rejection_reason.txt", "w") as f:
                                 f.write("Duration mismatch")
                             res["rejected"]["duration_mismatch"] += 1
                             continue
 
                         print(f"Accepted {mp3_file_path}: {round(abs(mp3_duration-lab_duration), 3)}s difference")
-                        shutil.copytree(f"{billboard_data_directory}{dir}", f"{accepted_dir}{os.path.sep}{dir}")
+                        shutil.copytree(f"{billboard_data_directory}{os.path.sep}{dir}", f"{accepted_dir}{os.path.sep}{dir}")
                         res["accepted"] += 1
     # Create a json file in the processed directory containing the results
     with open(processing_result_file, "w") as f:
