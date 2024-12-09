@@ -7,6 +7,7 @@ class CullMode(Enum):
     LEAVE = 0,
     CULL = 1,
     REMAP = 2
+    BYPASS = 3,
 
 FLAT_TO_SHARP = {
     "Cb": "B",
@@ -36,8 +37,12 @@ def remap_chord_label(billboard_chord:str, cull_mode:CullMode):
     root, chord_class = billboard_chord.split(':', 1)
     if chord_class[0] == '(': # get rid of non-sense annotations
         return ('N', 'N')
+    if chord_class == '1/1':
+        chord_class = '1'
     if root in FLAT_TO_SHARP:
         root = FLAT_TO_SHARP[root]
+    if cull_mode == CullMode.BYPASS:
+        return (root, chord_class)
     if chord_class not in CHORDS and chord_class not in INVERSIONS:
         if chord_class in REMAP:
             chord_class = REMAP[chord_class]
