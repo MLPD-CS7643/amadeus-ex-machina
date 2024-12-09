@@ -109,7 +109,11 @@ class Solver:
         return total_loss, avg_loss, accuracy
 
     def train_and_evaluate(
-        self, trial=None, trial_metric=TrialMetric.LOSS, plot_results=False
+        self,
+        trial=None,
+        trial_metric=TrialMetric.LOSS,
+        plot_results=False,
+        verbose=True,
     ):
         train_loader = self.train_dataloader
         valid_loader = self.valid_dataloader
@@ -118,9 +122,10 @@ class Solver:
         best_loss = float("inf")
         best_val_accuracy = 0
         for epoch_idx in range(self.epochs):
-            print("-----------------------------------")
-            print(f"Epoch {epoch_idx + 1}")
-            print("-----------------------------------")
+            if verbose:
+                print("-----------------------------------")
+                print(f"Epoch {epoch_idx + 1}")
+                print("-----------------------------------")
 
             if epoch_idx < self.warmup_epochs:
                 self.__lr_warmup(epoch_idx + 1)
@@ -131,10 +136,13 @@ class Solver:
             total_correct = 0
             total_samples = 0
 
-            # Create progress bar for batches
-            progress_bar = tqdm(train_loader, desc=f"Training", leave=True)
+            loader = (
+                tqdm(train_loader, desc=f"Training", leave=True)
+                if verbose
+                else train_loader
+            )
 
-            for inputs, labels in progress_bar:
+            for inputs, labels in loader:
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
 
@@ -155,9 +163,13 @@ class Solver:
                 total_samples += labels.size(0)
 
                 # Update progress bar description
-                progress_bar.set_postfix(
-                    {"loss": f"{loss.item():.4f}", "accuracy": f"{batch_accuracy:.4f}"}
-                )
+                if verbose:
+                    loader.set_postfix(
+                        {
+                            "loss": f"{loss.item():.4f}",
+                            "accuracy": f"{batch_accuracy:.4f}",
+                        }
+                    )
 
             # Calculate epoch-level training metrics
             avg_train_loss = total_loss / total_samples
@@ -181,13 +193,13 @@ class Solver:
             self.train_loss_history.append(avg_train_loss)
             self.valid_loss_history.append(avg_val_loss)
 
-            print(
-                f"Training Loss: {avg_train_loss:.4f}. Validation Loss: {avg_val_loss:.4f}."
-            )
-            print(
-                f"Training Accuracy: {train_accuracy:.4f}. Validation Accuracy: {val_accuracy:.4f}."
-            )
-
+            if verbose:
+                print(
+                    f"Training Loss: {avg_train_loss:.4f}. Validation Loss: {avg_val_loss:.4f}."
+                )
+                print(
+                    f"Training Accuracy: {train_accuracy:.4f}. Validation Accuracy: {val_accuracy:.4f}."
+                )
             # Optuna injection
             if trial:
                 match trial_metric:
