@@ -45,25 +45,43 @@ class CRNNModel(nn.Module):
         return x.size(1) * x.size(2)
 
     def forward(self, x):
-        x = x.unsqueeze(1).unsqueeze(-1)  # Reshape to (batch_size, 1, input_features, 1)
+        # x: (batch_size, seq_length, input_features)
+
+        batch_size, seq_length, _ = x.size()
+        # Flatten seq dimension into batch to apply CNN per-chord
+        x = x.view(batch_size * seq_length, self.input_features)  # (B*seq, input_features)
+
+        # CNN expects: (B*seq, 1, freq, 1)
+        x = x.unsqueeze(1).unsqueeze(-1)
         x = F.relu(self.conv1(x))
         x = self.pool(x)
         x = F.relu(self.conv2(x))
         x = self.pool(x)
 
-        # Reshape for LSTM
-        batch_size, channels, freq_bins, time_steps = x.size()
-        x = x.permute(0, 3, 1, 2).contiguous().view(batch_size, time_steps, -1)
+        # After CNN pooling: (B*seq, channels, freq_bins, 1)
+        # Flatten to (B*seq, channels*freq_bins)
+        b, c, f, t = x.size()  # t should be 1 after pooling
+        x = x.view(b, c*f)
+
+        # Reshape back to sequence: (batch_size, seq_length, lstm_input_size)
+        x = x.view(batch_size, seq_length, -1)
 
         # LSTM
-        h0 = torch.zeros(
-            self.num_layers * (2 if self.bidirectional else 1), batch_size, self.hidden_size
-        ).to(x.device)
-        c0 = torch.zeros(
-            self.num_layers * (2 if self.bidirectional else 1), batch_size, self.hidden_size
-        ).to(x.device)
-        x, _ = self.lstm(x, (h0, c0))
+        h0 = torch.zeros(self.num_layers * (2 if self.bidirectional else 1), 
+                        batch_size, 
+                        self.hidden_size, 
+                        device=x.device)
+        c0 = torch.zeros(self.num_layers * (2 if self.bidirectional else 1), 
+                        batch_size, 
+                        self.hidden_size, 
+                        device=x.device)
 
-        # Fully connected layer
-        x = self.fc(x[:, -1, :])
+        x, _ = self.lstm(x, (h0, c0))  # (batch_size, seq_length, lstm_output_size)
+
+        # Select the last timestep's output
+        x = x[:, -1, :]  # (batch_size, lstm_output_size)
+
+        # Fully connected layer for classification
+        x = self.fc(x)  # (batch_size, num_classes)
+
         return x
