@@ -57,6 +57,7 @@ datagen/fx_out/*/*.txt
 # Don't upload massive data files to git
 data/raw/
 data/processed/
+data/generation
 datagen/chords/
 datagen/sf2/
 
