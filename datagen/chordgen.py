@@ -345,3 +345,81 @@ def __synthesize_to_wav(midi_path, soundfont_path, output_file, instrument_id=0,
         wf.writeframes(int_audio.tobytes())
 
     synth.stop()
+
+def generate_sine_chords(out_dir, start_octave:int=2, end_octave:int=4, duration=2.0, make_dir=False):
+    """
+    Generates .wav files for all defined chords using pure sine tones
+    Also saves chord_ref.json lookup table with metadata.
+
+    Args:
+        out_dir (str): output directory
+        start_octave (int): first octave (min 0)
+        end_octave (int): last octave (max 7)
+        make_dir (bool): automatically create output directory if it doesn't exist (make sure you know where your working directory is set)
+    
+    Returns:
+        None
+    """
+    BIT_DEPTH = 16 #automatic from sine generation function 
+    base_path = Path(out_dir)
+    if make_dir:
+        base_path.mkdir(parents=True, exist_ok=True)
+    wav_dir = base_path / WAV_SUBDIR
+    os.makedirs(wav_dir, exist_ok=True)
+    json_out = {}
+    print("Starting chord generation...")
+    for octave in range(start_octave, end_octave+1):
+        for i in range(12):
+            root = C0 + octave * 12 + i
+            for chord_class, intervals in CHORDS.items():
+                midi = __generate_midi_chord(root, intervals)
+                note_name = __note_lookup(root)
+                mid_filename = f"{note_name}{chord_class}_O{octave}"
+                mid_filepath = wav_dir / f"{mid_filename}.mid"
+                midi.save(mid_filepath)
+                instrument_name = "pure_sine"
+                wav_filename = f"{mid_filename}_{instrument_name}"
+                wav_filepath = wav_dir / f"{wav_filename}.wav"
+                synthesize_sine_wav(str(mid_filepath.absolute()), str(wav_filepath.absolute()), sample_rate=SAMPLE_RATE)
+                json_out[wav_filename] = {
+                    "root": note_name,
+                    "chord_class": chord_class,
+                    "billboard_notation": f"{note_name}:{chord_class}",
+                    "octave": octave,
+                    "instrument": instrument_name,
+                    "gm_preset_id": "n/a",
+                    "filename": f"{wav_filename}.wav",
+                    "format": "wav",
+                    "duration(s)": duration,
+                    "sample_rate": SAMPLE_RATE,
+                    "bit_depth": BIT_DEPTH
+                }
+                print(wav_filename)
+                os.remove(mid_filepath)
+    print("Saving lookup table...")
+    __save_json(json_out, base_path)
+    print("Fin~")
+
+def synthesize_sine_wav(midi_path, output_file, sample_rate=44100):
+    midi = MidiFile(midi_path)
+    duration = 2.0  # Define chord duration or calculate from MIDI
+    audio_samples = []
+
+    for track in midi.tracks:
+        for msg in track:
+            if msg.type == 'note_on':
+                freq = 440 * (2 ** ((msg.note - 69) / 12)) #midi to freq using a=440 and 69th midi note as A4
+                t = np.linspace(0, duration, int(sample_rate * duration), False)  # Time axis
+                sine = np.sin(2 * np.pi * freq * t)  # Sine wave formula
+                audio_samples.append(sine)
+
+    # Mixdown to mono by summing (simple mix) and normalizing
+    if audio_samples:
+        chord_wave = np.sum(audio_samples, axis=0) / len(audio_samples)
+        chord_wave = np.int16(chord_wave / np.max(np.abs(chord_wave)) * 32767)  # Normalize to int16
+
+        with wave.open(output_file, 'wb') as wf:
+            wf.setnchannels(1)  # Mono
+            wf.setsampwidth(2)  # 16-bit samples
+            wf.setframerate(sample_rate)
+            wf.writeframes(chord_wave.tobytes())
