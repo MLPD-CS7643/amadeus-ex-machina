@@ -5,16 +5,40 @@ import torch.nn.functional as F
 
 class CRNNModel(nn.Module):
     def __init__(
-        self, input_features, num_classes, hidden_size, num_layers=1, bidirectional=True
+        self, input_features, num_classes, hidden_size, num_layers=1, bidirectional=True, **cnn_params
     ):
         super(CRNNModel, self).__init__()
 
         self.input_features = input_features
+        self.n_blocks = cnn_params.pop("n_blocks", 3)
+        self.block_depth = cnn_params.pop("block_depth", 3)
+        self.pad = cnn_params.pop("pad", 1)
+        self.stride = cnn_params.pop("stride", 1)
+        self.k_conv = cnn_params.pop("k_conv", 3)
+        self.dropout = cnn_params.pop("dropout", 0.2)
+        self.out_channels = cnn_params.pop("out_channels", 64)
 
         # Convolutional layers
-        self.conv1 = nn.Conv2d(1, 64, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
-        self.pool = nn.AdaptiveMaxPool2d((None, 1))  # Reduce time_steps to 1
+        self.cnn_blocks = nn.ModuleList()
+        for n in range(self.n_blocks):
+            scale = 2**n
+            if n == 0:
+                in_ch = 1
+            else:
+                in_ch = self.out_channels * 2**(n-1)
+            block = nn.Sequential(
+            nn.Conv2d(in_channels=in_ch, out_channels=self.out_channels*scale, kernel_size=self.k_conv, padding=self.pad, stride=self.stride, bias=False),
+            nn.BatchNorm2d(self.out_channels*scale),
+            nn.ReLU(inplace=True),
+            )
+            for _ in range(self.block_depth-1):
+                block.append(nn.Conv2d(in_channels=self.out_channels*scale, out_channels=self.out_channels*scale, kernel_size=self.k_conv, padding=self.pad, stride=self.stride, bias=False))
+                block.append(nn.BatchNorm2d(self.out_channels*scale))
+                block.append(nn.ReLU(inplace=True))
+            self.cnn_blocks.append(block)
+        self.dropout_layer = nn.Dropout(self.dropout)
+        self.avg_pool = nn.AdaptiveAvgPool2d((1,1))
+        #self.lstm_input_size = int((self.out_channels * 2**(self.n_blocks-1))/4)
 
         # Dynamically calculate LSTM input size
         self.lstm_input_size = self._calculate_lstm_input_size()
@@ -36,12 +60,13 @@ class CRNNModel(nn.Module):
         self.fc = nn.Linear(lstm_output_size, num_classes)
 
     def _calculate_lstm_input_size(self):
-        dummy_input = torch.zeros((1, 1, self.input_features, 1))  # Single feature
+        x = torch.zeros((1, 1, self.input_features, 1))  # Single feature
         with torch.no_grad():
-            x = F.relu(self.conv1(dummy_input))
-            x = self.pool(x)  # Adaptive pooling prevents invalid dimensions
-            x = F.relu(self.conv2(x))
-            x = self.pool(x)
+            for block in self.cnn_blocks:
+                x = block(x)
+            if self.dropout > 0:
+                x = self.dropout_layer(x)
+            x = self.avg_pool(x)
         return x.size(1) * x.size(2)
 
     def forward(self, x):
@@ -53,10 +78,11 @@ class CRNNModel(nn.Module):
 
         # CNN expects: (B*seq, 1, freq, 1)
         x = x.unsqueeze(1).unsqueeze(-1)
-        x = F.relu(self.conv1(x))
-        x = self.pool(x)
-        x = F.relu(self.conv2(x))
-        x = self.pool(x)
+        for block in self.cnn_blocks:
+            x = block(x)
+        if self.dropout > 0:
+            x = self.dropout_layer(x)
+        x = self.avg_pool(x)
 
         # After CNN pooling: (B*seq, channels, freq_bins, 1)
         # Flatten to (B*seq, channels*freq_bins)
