@@ -307,7 +307,7 @@ class ChordDataProcessor:
         spectrogram = T.Spectrogram(n_fft=n_fft, hop_length=hop_length, power=2.0)(waveform)
         return spectrogram
 
-    def load_chord_data(self):
+    def load_chord_data(self, notation="billboard"):
         """Loads chord data from the JSON file and extracts features/labels."""
         with open(self.chord_json_path, "r") as f:
             chord_data = json.load(f)
@@ -325,7 +325,10 @@ class ChordDataProcessor:
                     if self.mode == "spectrogram":
                         spectrogram = PT.Spectrogram()(waveform)
                         features.append(spectrogram.numpy())
-                    labels.append(value["billboard_notation"])
+                    if notation == "billboard":
+                        labels.append(value["billboard_notation"])
+                    else:
+                        labels.append(value["chord_class"])
                 except KeyError as e:
                     print(f"Skipping entry {key} due to missing key: {e}")
         else:
@@ -339,7 +342,10 @@ class ChordDataProcessor:
                     if self.mode == "spectrogram":
                         spectrogram = PT.Spectrogram()(waveform)
                         features.append(spectrogram.numpy())
-                    labels.append(entry["billboard_notation"])
+                    if notation == "billboard":
+                        labels.append(value["billboard_notation"])
+                    else:
+                        labels.append(value["chord_class"])
                 except KeyError as e:
                     print(f"Skipping entry {entry['filename']} due to missing key: {e}")
 
@@ -390,9 +396,7 @@ class ChordDataProcessor:
         self.synchronize_features_and_labels()  # Ensure consistency
 
         X_train, X_test, y_train, y_test = train_test_split(
-            self.features, self.labels, test_size=test_size, random_state=random_state
-        )
-
+            self.features, self.labels, test_size=test_size, stratify=self.labels, random_state=random_state)
         num_classes = len(self.label_encoder.classes_)
 
         X_train_tensor = torch.tensor(X_train, dtype=torch.float32, device=self.device)
