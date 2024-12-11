@@ -3,6 +3,7 @@ import random
 import torch
 import pandas as pd
 import numpy as np
+import pickle
 
 RANDOM_SEED = 42
 
@@ -130,9 +131,7 @@ def run_tabular_chroma_inference(
     chroma_df = chroma_df.drop(chroma_df.columns[0], axis=1)
 
     # Extract timestamps from the first column after dropping the junk column
-    timestamps = chroma_df.iloc[
-        :, 0
-    ].values
+    timestamps = chroma_df.iloc[:, 0].values
 
     features = chroma_df.iloc[:, 1:].values
 
@@ -140,9 +139,7 @@ def run_tabular_chroma_inference(
     features_scaled = scaler.transform(features)
 
     # Convert features to tensor and move to the appropriate device
-    features_tensor = torch.tensor(features_scaled, dtype=torch.float32).to(
-        device
-    )
+    features_tensor = torch.tensor(features_scaled, dtype=torch.float32).to(device)
 
     # Run inference
     model.eval()
@@ -170,3 +167,35 @@ def run_tabular_chroma_inference(
     annotations.append((final_frame_start, final_frame_end, chord_label))
 
     write_annotations(output_lab_path, annotations)
+
+
+def save_history(solver, filename="history.pkl"):
+    # Create a DataFrame from the history lists
+    history_df = pd.DataFrame(
+        {
+            "Train Accuracy": solver.train_accuracy_history,
+            "Validation Accuracy": solver.valid_accuracy_history,
+            "Train Loss": solver.train_loss_history,
+            "Validation Loss": solver.valid_loss_history,
+        }
+    )
+
+    # Pickle the DataFrame to the specified file
+    with open(filename, "wb") as file:
+        pickle.dump(history_df, file)
+
+    print(f"History saved to {filename}")
+
+
+def load_history(solver, filename="history.pkl"):
+    # Load the pickled DataFrame from the file
+    with open(filename, "rb") as file:
+        history_df = pickle.load(file)
+
+    # If the class attributes need to be repopulated from the DataFrame:
+    solver.train_accuracy_history = history_df["Train Accuracy"].tolist()
+    solver.valid_accuracy_history = history_df["Validation Accuracy"].tolist()
+    solver.train_loss_history = history_df["Train Loss"].tolist()
+    solver.valid_loss_history = history_df["Validation Loss"].tolist()
+
+    print(f"History loaded from {filename}")
