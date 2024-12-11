@@ -250,30 +250,61 @@ class Solver:
     def plot_curves(self, file_prefix):
         epochs = [i + 1 for i in range(len(self.train_accuracy_history))]
 
+        plt.rcParams.update(
+            {
+                "font.size": 8,
+                "axes.titlesize": 9,
+                "axes.labelsize": 8,
+                "legend.fontsize": 7,
+                "xtick.labelsize": 7,
+                "ytick.labelsize": 7,
+                "figure.dpi": 600,
+                "savefig.dpi": 600,
+            }
+        )
+
+        width, height = 3.5, 2.5
+
         # Plot accuracy curves
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(width, height))
         plt.plot(
-            epochs, self.train_accuracy_history, marker="o", label="Training Accuracy"
+            epochs,
+            self.train_accuracy_history,
+            label="Training Accuracy",
+            linewidth=1.5,
         )
         plt.plot(
-            epochs, self.valid_accuracy_history, marker="s", label="Validation Accuracy"
+            epochs,
+            self.valid_accuracy_history,
+            label="Validation Accuracy",
+            linewidth=1.5,
+            linestyle="--",
         )
         plt.title("Accuracy Curve")
         plt.xlabel("Epochs")
         plt.ylabel("Accuracy")
-        plt.ylim(0, 1)
-        plt.legend()
+        plt.ylim(0, 1.0)
+        plt.grid(True, linestyle=":", linewidth=0.8)
+        plt.legend(loc="lower right", frameon=False)
+        plt.tight_layout()
         plt.savefig(f"{Path(__file__).parent}/figures/{file_prefix}_accuracy.png")
-        plt.show()
+        plt.close()
 
         # Plot loss curves
-        plt.figure(figsize=(8, 6))
-        plt.plot(epochs, self.train_loss_history, marker="o", label="Training Loss")
-        plt.plot(epochs, self.valid_loss_history, marker="s", label="Validation Loss")
+        plt.figure(figsize=(width, height))
+        plt.plot(epochs, self.train_loss_history, label="Training Loss", linewidth=1.5)
+        plt.plot(
+            epochs,
+            self.valid_loss_history,
+            label="Validation Loss",
+            linewidth=1.5,
+            linestyle="--",
+        )
         plt.title("Loss Curve")
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
-        # Usually, no fixed ylim for loss, as it can vary widely
-        plt.legend()
+        plt.grid(True, linestyle=":", linewidth=0.8)
+        plt.legend(loc="upper right", frameon=False)
+        plt.tight_layout()
         plt.savefig(f"{Path(__file__).parent}/figures/{file_prefix}_loss.png")
-        plt.show()
+        plt.close()
