@@ -257,15 +257,9 @@ class MirDataProcessor:
     
 
 class ChordDataProcessor:
-    def __init__(self, chord_json_path, batch_size=64, seq_length=16, device="cpu", process_sequential=False, mode="chroma", json="keyed", audio_path=str(Path.cwd())):
-        self.chord_json_path = Path(chord_json_path)
-        self.batch_size = batch_size
-        self.seq_length = seq_length
+    def __init__(self, device="cpu", process_sequential=False):
         self.process_sequential = process_sequential
         self.device = device
-        self.mode = mode #this picks if the audio data is converted to "chroma" (chromagram) or "spectrogram"
-        self.json = json #controls the json format because I am dumb and there are 2 types (use "keyed" for chordgen and (i think) fxgen, anything else will set it to texture bias format)
-        self.audio_path = audio_path #parent for the audio file dir, since the jsons have different formatting this will be different for keyed/entry
         
         self.scaler = MinMaxScaler()
         self.label_encoder = LabelEncoder()
@@ -307,22 +301,25 @@ class ChordDataProcessor:
         spectrogram = T.Spectrogram(n_fft=n_fft, hop_length=hop_length, power=2.0)(waveform)
         return spectrogram
 
-    def load_chord_data(self, notation="billboard"):
+    def load_chord_data(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd())):
+        #mode picks if the audio data is converted to "chroma" (chromagram) or "spectrogram"
+        #json controls the json format because I am dumb and there are 2 types (use "keyed" for chordgen and (i think) fxgen, anything else will set it to texture bias format)
+        #audio_path parent for the audio file dir, since the jsons have different formatting this will be different for keyed/entry
         """Loads chord data from the JSON file and extracts features/labels."""
-        with open(self.chord_json_path, "r") as f:
+        with open(Path(chord_json_path), "r") as f:
             chord_data = json.load(f)
 
         features = []
         labels = []
-        if json == "keyed":
+        if jsontype == "keyed":
             for key, value in chord_data.items():
                 try:
-                    audio_path = self.audio_path + value["filename"]
+                    audio_path = audio_path + "/"  + value["filename"]
                     waveform, sr = self.load_audio(audio_path)
-                    if self.mode == "chroma":
+                    if mode == "chroma":
                         chromagram = self.compute_chromagram_torchaudio(waveform, sr)
                         features.append(chromagram.numpy())
-                    if self.mode == "spectrogram":
+                    if mode == "spectrogram":
                         spectrogram = PT.Spectrogram()(waveform)
                         features.append(spectrogram.numpy())
                     if notation == "billboard":
@@ -332,14 +329,14 @@ class ChordDataProcessor:
                 except KeyError as e:
                     print(f"Skipping entry {key} due to missing key: {e}")
         else:
-            for entry in chord_data.items():
+            for entry in chord_data:
                 try:
-                    audio_path = self.audio_path + entry["processed_path"]
+                    audio_path = audio_path + "/" + entry["processed_path"]
                     waveform, sr = self.load_audio(audio_path)
-                    if self.mode == "chroma":
+                    if mode == "chroma":
                         chromagram = self.compute_chromagram_torchaudio(waveform, sr)
                         features.append(chromagram.numpy())
-                    if self.mode == "spectrogram":
+                    if mode == "spectrogram":
                         spectrogram = PT.Spectrogram()(waveform)
                         features.append(spectrogram.numpy())
                     if notation == "billboard":
@@ -391,7 +388,7 @@ class ChordDataProcessor:
         self.features = self.features[:min_length]
         self.labels = self.labels[:min_length]
 
-    def build_data_loaders(self, test_size=0.2, random_state=42):
+    def build_data_loaders(self, batch_size=64, seq_length=16, test_size=0.2, random_state=42):
         """Splits data into training/testing sets and creates DataLoaders."""
         self.synchronize_features_and_labels()  # Ensure consistency
 
@@ -407,15 +404,15 @@ class ChordDataProcessor:
         train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
         test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
 
-        train_loader = DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=self.batch_size)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size)
 
         return train_loader, test_loader, num_classes
 
-    def process_all_and_build_loaders(self, target_features_shape=None, target_labels_shape=None, test_size=0.2, random_state=42):
+    def process_all_and_build_loaders(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd()), batch_size=64, seq_length=16, test_size=0.2, random_state=42):
         """Combines all steps into one pipeline."""
-        self.load_chord_data()
+        self.load_chord_data(chord_json_path, notation, mode, jsontype, audio_path)
         self.preprocess_data()
         self.prepare_data()
         self.synchronize_features_and_labels()
-        return self.build_data_loaders(test_size=test_size, random_state=random_state)
+        return self.build_data_loaders(batch_size=batch_size, seq_length=seq_length, test_size=test_size, random_state=random_state)
