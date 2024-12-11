@@ -145,3 +145,13 @@ Potential enhancements to consider:
 ## References
 - "IMAGENET-TRAINED CNNS ARE BIASED TOWARDS TEXTURE" (Geirhos et al.)
 - [Additional references to be added]
+
+
+## Data Processing
+The experiment includes a comprehensive data processing pipeline implemented in the `ChordDataProcessor` class. This handles:
+- Audio feature extraction (chromagrams and spectrograms)
+- Batch processing and data loading
+- Multiple metadata format support
+- Training/validation split management
+
+For detailed implementation instructions and API documentation, see [CDP_readme.md](./CDP_readme.md).

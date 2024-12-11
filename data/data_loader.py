@@ -257,7 +257,7 @@ class MirDataProcessor:
     
 
 class ChordDataProcessor:
-    def __init__(self, chord_json_path, batch_size=64, seq_length=16, device="cpu", process_sequential=False, mode="chroma", json="keyed", audio_path=Path.pwd()):
+    def __init__(self, chord_json_path, batch_size=64, seq_length=16, device="cpu", process_sequential=False, mode="chroma", json="keyed", audio_path=str(Path.pwd())):
         self.chord_json_path = Path(chord_json_path)
         self.batch_size = batch_size
         self.seq_length = seq_length
