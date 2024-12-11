@@ -1,14 +1,9 @@
 import os
 import copy
 import inspect
-import torch
 import optuna
-import torch.utils
-from collections.abc import Iterable
-from models.griddy_model import GriddyModel
-from pathlib import Path
-from solver import Solver
-from enum import Enum, auto
+from enum import Enum
+from solver import TrialMetric
 
 
 class SearchMethod(Enum):
@@ -17,76 +12,11 @@ class SearchMethod(Enum):
     UNIFORM - find value between two floats, ex: [1.0, 4.0]
     LOG_UNIFORM - same but log-scaled, ex: [0.001, 0.1]
     """
-    CATEGORICAL = auto()
-    UNIFORM = auto()
-    LOG_UNIFORM = auto()
+    CATEGORICAL = 0
+    UNIFORM = 1
+    LOG_UNIFORM = 2
 
-
-### EXAMPLE PARAM SETUP ###
-
-SOLVER_PARAMS = {
-    Solver : {
-        "device": "cuda",
-        "epochs": 10,
-        "early_stop_epochs": 0, # early stop after n epochs without improvement, 0 to disable
-        "warmup_epochs": 0, # 0 to disable
-        "dtype": "float16",
-        "train_dataloader": None, # assume a DataLoader object
-        "valid_dataloader": None, # assume a DataLoader object
-        "direction": "minimize" # must specify this, even if not used by solver
-    }
-}
-
-MODEL_PARAMS = {
-    GriddyModel: {
-        "n_blocks": [3],
-        "block_depth": [3],
-        "pad": [1],
-        "stride": [1],
-        "k_conv": [3],
-        "maxpool": [2],
-        "dropout": [0.2, 0.3],
-        "out_channels": [16, 32, 64, 128, SearchMethod.CATEGORICAL],
-        # "out_channels": [16, 32, 64, 128] is also valid, CATEGORICAL is assumed in this instance
-    }
-}
-
-OPTIM_PARAMS = {
-    torch.optim.SGD : {
-        "lr": [0.001, 0.1, SearchMethod.LOG_UNIFORM],
-        "momentum": [0.9, 0.99, SearchMethod.UNIFORM],
-        "weight_decay": [0.00001],
-    },
-    torch.optim.Adam : {
-        "lr": [0.03, 0.02, 0.01, 0.1],
-        "momentum": [0.98, 0.99],
-        "weight_decay": [0.00001],
-    }
-}
-
-SCHED_PARAMS = {
-    torch.optim.lr_scheduler.CosineAnnealingWarmRestarts : {
-        "T_max": [10],
-    },
-    torch.optim.lr_scheduler.StepLR : {
-        "step_size": [10, 20],
-        "gamma" : [0.1, 0.05],
-    }
-}
-
-CRITERION_PARAMS = {
-    torch.nn.CrossEntropyLoss : {}
-}
-
-PARAM_SET = {
-    "solver": SOLVER_PARAMS,
-    "model" : MODEL_PARAMS,
-    "optim" : OPTIM_PARAMS,
-    "sched" : SCHED_PARAMS,
-    "criterion" : CRITERION_PARAMS,
-}
-
-def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
+def hit_griddy(study_name, param_set, out_dir, trial_metric:TrialMetric, n_trials, n_jobs, prune, resume):
     """
     I am addicted to hitting the griddy.
 
@@ -94,6 +24,7 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
         study_name (str)
         param_set (dict): full set of params following example pattern
         out_dir: (Path or str): folder to save output
+        trial_metric: (TrialMetric) metric that optuna will use to evaluate trials
         n_trials (int): number of trials
         n_jobs (int): number of workers
         prune (bool): enable optuna pruning
@@ -103,7 +34,6 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
         None
     """
     print("\"Hitting the griddy...\" -Ellie")
-
     os.makedirs(out_dir, exist_ok=True)
     full_path = os.path.join(out_dir, f"{study_name}.db")
     storage_path = f'sqlite:///{full_path}'
@@ -114,21 +44,21 @@ def hit_griddy(study_name, param_set, out_dir, n_trials, n_jobs, prune, resume):
         except:
             pass
 
-    study = optuna.create_study(study_name=study_name, direction=__get_direction(param_set), storage=storage_path, load_if_exists=resume)
-    objective = __create_objective(param_set, out_dir, prune)
+    study = optuna.create_study(study_name=study_name, direction='minimize' if trial_metric == TrialMetric.LOSS else 'maximize', storage=storage_path, load_if_exists=resume)
+    objective = __create_objective(param_set, out_dir, prune, trial_metric)
     study.optimize(objective, n_trials=n_trials, n_jobs=n_jobs)
-
     print("DONE")
+    return study
 
-def __create_objective(param_set, save_dir, prune):
+def __create_objective(param_set, save_dir, prune, trial_metric):
     # optuna objective function
     def objective(trial):
         model = __instantiate_class_with_trial_params(trial, 'model', copy.deepcopy(param_set), enforce_single_class=True)
         optimizer = __instantiate_class_with_trial_params(trial, 'optim', copy.deepcopy(param_set), pass_through_kwargs={'params': model.parameters()})
         scheduler = __instantiate_class_with_trial_params(trial, 'sched', copy.deepcopy(param_set), pass_through_kwargs={'optimizer': optimizer})
         criterion = __instantiate_class_with_trial_params(trial, 'criterion', copy.deepcopy(param_set))
-        solver:Solver = __instantiate_class_with_trial_params(trial, 'solver', copy.deepcopy(param_set), enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion, 'optuna_prune': prune})
-        best_metric = solver.train_and_evaluate(trial)
+        solver = __instantiate_class_with_trial_params(trial, 'solver', copy.deepcopy(param_set), enforce_single_class=True, pass_through_kwargs={'model': model, 'optimizer': optimizer, 'scheduler': scheduler, 'criterion': criterion, 'optuna_prune': prune})
+        best_metric = solver.train_and_evaluate(trial, trial_metric=trial_metric)
         #if len(trial.study.trials_dataframe().dropna(subset=['value'])) > 0 and trial.study.best_trial.number == trial.number:
         #    torch.save(solver.best_model, Path(save_dir) / f'{solver.best_model.__class__.__name__}_best_model.pth')
         return best_metric
@@ -167,9 +97,7 @@ def __instantiate_class_with_trial_params(trial, class_group, param_set, pass_th
     else:
         class_params = {}
     for key, values in param_group_dict[chosen_class].items():
-
         if isinstance(values, list):
-            print(values)
             if len(values) > 1:
                 if isinstance(values[-1], SearchMethod):
                     search_method = values[-1]
