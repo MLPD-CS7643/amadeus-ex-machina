@@ -5,6 +5,9 @@ import mir_eval
 import mirdata
 import torch
 from torch.utils.data import TensorDataset, DataLoader
+import torchaudio
+import torchaudio.transforms as T
+import torchaudio.prototype.transforms as PT
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
@@ -254,18 +257,55 @@ class MirDataProcessor:
     
 
 class ChordDataProcessor:
-    def __init__(self, chord_json_path, batch_size=64, seq_length=16, device="cpu", process_sequential=False):
+    def __init__(self, chord_json_path, batch_size=64, seq_length=16, device="cpu", process_sequential=False, mode="chroma", json="keyed", audio_path=Path.pwd()):
         self.chord_json_path = Path(chord_json_path)
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.process_sequential = process_sequential
         self.device = device
-
+        self.mode = mode #this picks if the audio data is converted to "chroma" (chromagram) or "spectrogram"
+        self.json = json #controls the json format because I am dumb and there are 2 types (use "keyed" for chordgen and (i think) fxgen, anything else will set it to texture bias format)
+        self.audio_path = audio_path #parent for the audio file dir, since the jsons have different formatting this will be different for keyed/entry
+        
         self.scaler = MinMaxScaler()
         self.label_encoder = LabelEncoder()
 
         self.features = None
         self.labels = None
+    
+    def load_audio(self, audio_path: str):
+        """Load an audio file and convert to mono if necessary."""
+        waveform, sr = torchaudio.load(audio_path)
+        if waveform.shape[0] > 1:  # If stereo, average channels to make mono
+            waveform = waveform.mean(dim=0)
+        return waveform, sr
+
+    def compute_chromagram_torchaudio(self, waveform: torch.Tensor, sr: int, n_fft: int = 2048, hop_length: int = 512):
+        """
+        Compute a chromagram using torchaudio.prototype.transforms.ChromaSpectrogram.
+        
+        Args:
+            waveform: The input audio waveform.
+            sr: Sampling rate of the audio.
+            n_fft: FFT size.
+            hop_length: Hop length for STFT.
+            
+        Returns:
+            chromagram: Chromagram tensor of shape (12, time).
+        """
+        chroma_transform = PT.ChromaSpectrogram(
+            sample_rate=sr,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_chroma=12,  # 12 pitch classes
+        )
+        chromagram = chroma_transform(waveform)
+        return chromagram
+    
+    def compute_spectrogram_torchaudio(waveform: torch.Tensor, n_fft: int = 2048, hop_length: int = 512):
+        """Compute a spectrogram using torchaudio."""
+        spectrogram = T.Spectrogram(n_fft=n_fft, hop_length=hop_length, power=2.0)(waveform)
+        return spectrogram
 
     def load_chord_data(self):
         """Loads chord data from the JSON file and extracts features/labels."""
@@ -274,21 +314,34 @@ class ChordDataProcessor:
 
         features = []
         labels = []
-
-        for key, value in chord_data.items():
-            try:
-                feature_vector = [
-                    value["octave"],
-                    value["gm_preset_id"],
-                    value["duration(s)"],
-                    value["sample_rate"],
-                    value["bit_depth"],
-                ]
-                label = value["chord_class"]
-                features.append(feature_vector)
-                labels.append(label)
-            except KeyError as e:
-                print(f"Skipping entry {key} due to missing key: {e}")
+        if json == "keyed":
+            for key, value in chord_data.items():
+                try:
+                    audio_path = self.audio_path + value["filename"]
+                    waveform, sr = self.load_audio(audio_path)
+                    if self.mode == "chroma":
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr)
+                        features.append(chromagram.numpy())
+                    if self.mode == "spectrogram":
+                        spectrogram = PT.Spectrogram()(waveform)
+                        features.append(spectrogram.numpy())
+                    labels.append(value["billboard_notation"])
+                except KeyError as e:
+                    print(f"Skipping entry {key} due to missing key: {e}")
+        else:
+            for entry in chord_data.items():
+                try:
+                    audio_path = self.audio_path + entry["processed_path"]
+                    waveform, sr = self.load_audio(audio_path)
+                    if self.mode == "chroma":
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr)
+                        features.append(chromagram.numpy())
+                    if self.mode == "spectrogram":
+                        spectrogram = PT.Spectrogram()(waveform)
+                        features.append(spectrogram.numpy())
+                    labels.append(entry["billboard_notation"])
+                except KeyError as e:
+                    print(f"Skipping entry {entry['filename']} due to missing key: {e}")
 
         self.features = np.array(features)
         self.labels = np.array(labels)
@@ -355,7 +408,7 @@ class ChordDataProcessor:
 
         return train_loader, test_loader, num_classes
 
-    def process_all_and_build_loaders(self, target_features_shape, target_labels_shape, test_size=0.2, random_state=42):
+    def process_all_and_build_loaders(self, target_features_shape=None, target_labels_shape=None, test_size=0.2, random_state=42):
         """Combines all steps into one pipeline."""
         self.load_chord_data()
         self.preprocess_data()
