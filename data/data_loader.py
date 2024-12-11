@@ -314,8 +314,8 @@ class ChordDataProcessor:
         if jsontype == "keyed":
             for key, value in chord_data.items():
                 try:
-                    audio_path = audio_path + "/"  + value["filename"]
-                    waveform, sr = self.load_audio(audio_path)
+                    audio_file = audio_path + "/"  + value["filename"]
+                    waveform, sr = self.load_audio(audio_file)
                     if mode == "chroma":
                         chromagram = self.compute_chromagram_torchaudio(waveform, sr)
                         features.append(chromagram.numpy())
@@ -331,8 +331,9 @@ class ChordDataProcessor:
         else:
             for entry in chord_data:
                 try:
-                    audio_path = audio_path + "/" + entry["processed_path"]
-                    waveform, sr = self.load_audio(audio_path)
+                    fx_summary = "_".join(f"{key}_{value}" for key, value in entry['applied_fx'].items())
+                    audio_file = audio_path + "/" + entry["processed_path"] + fx_summary + ".mp3"
+                    waveform, sr = self.load_audio(audio_file)
                     if mode == "chroma":
                         chromagram = self.compute_chromagram_torchaudio(waveform, sr)
                         features.append(chromagram.numpy())
@@ -340,9 +341,9 @@ class ChordDataProcessor:
                         spectrogram = PT.Spectrogram()(waveform)
                         features.append(spectrogram.numpy())
                     if notation == "billboard":
-                        labels.append(value["billboard_notation"])
+                        labels.append(entry["billboard_notation"])
                     else:
-                        labels.append(value["chord_class"])
+                        labels.append(entry["chord_class"])
                 except KeyError as e:
                     print(f"Skipping entry {entry['filename']} due to missing key: {e}")
 
@@ -354,7 +355,8 @@ class ChordDataProcessor:
 
     def preprocess_data(self):
         """Scales features and encodes labels."""
-        self.features = self.scaler.fit_transform(self.features)
+        #self.features = self.scaler.fit_transform(self.features)
+        #scalar is probably unnecessary for spectro/chroma data
         self.labels = self.label_encoder.fit_transform(self.labels)
 
     def prepare_data(self):
