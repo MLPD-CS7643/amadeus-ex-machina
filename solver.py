@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 from enum import Enum
 from pathlib import Path
 from tqdm.notebook import tqdm
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset, Subset
+from sklearn.model_selection import KFold
 
 
 class TrialMetric(Enum):
@@ -118,7 +119,6 @@ class Solver:
     ):
         train_loader = self.train_dataloader
         valid_loader = self.valid_dataloader
-
         no_improve = 0
         best_loss = float("inf")
         best_val_accuracy = 0
@@ -241,6 +241,7 @@ class Solver:
                 return best_loss
             case TrialMetric.ACCURACY:
                 return best_val_accuracy
+        return best_loss
 
     def __lr_warmup(self, epoch):
         """Adjusts the learning rate according to the epoch during the warmup phase."""
