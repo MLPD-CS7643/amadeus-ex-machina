@@ -572,12 +572,13 @@ class ChordDataProcessor:
                     if mode == "chroma":
                         S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))**2
                         chromagram = librosa.feature.chroma_stft(S=S, sr=sr, n_chroma=n_chroma)
-                        out = chromagram[:, :seq_length * chromagram.shape[1] // seq_length].reshape(seq_length, n_chroma)
+                        out = chromagram[:, :seq_length].reshape(seq_length, n_chroma)
                         features.append(out)
 
                     elif mode == "spectrogram":
                         spectrogram = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))**2
-                        out = spectrogram[:, :seq_length * spectrogram.shape[1] // seq_length].reshape(seq_length, n_fft)
+                        n_channels = int(n_fft/2)
+                        out = spectrogram[:n_channels:, :seq_length].reshape(seq_length, n_channels)
                         features.append(out)
 
                     if notation == "billboard":
