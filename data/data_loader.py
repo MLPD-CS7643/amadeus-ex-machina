@@ -385,8 +385,7 @@ class MirDataProcessor:
     
 
 class ChordDataProcessor:
-    def __init__(self, device="cpu", process_sequential=False):
-        self.process_sequential = process_sequential
+    def __init__(self, device="cpu"):
         self.device = device
         
         self.scaler = MinMaxScaler()
@@ -450,14 +449,10 @@ class ChordDataProcessor:
                     if mode == "chroma":
                         chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=hop_length)
                         out = chromagram.numpy().reshape(seq_length, n_chroma)
-                        if seq_length == 1:
-                            out.mean(axis=0)
                         features.append(out)
                     if mode == "spectrogram":
                         spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=hop_length)
                         out = spectrogram.numpy().reshape(seq_length, n_fft)
-                        if seq_length == 1:
-                            out.mean(axis=0)
                         features.append(out)
                     if notation == "billboard":
                         labels.append(value["billboard_notation"])
@@ -477,14 +472,10 @@ class ChordDataProcessor:
                     if mode == "chroma":
                         chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=hop_length)
                         out = chromagram.numpy().reshape(seq_length, n_chroma)
-                        if seq_length == 1:
-                            out.mean(axis=0)
                         features.append(out)
                     if mode == "spectrogram":
                         spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=hop_length)
                         out = spectrogram.numpy().reshape(seq_length, n_fft)
-                        if seq_length == 1:
-                            out.mean(axis=0)
                         features.append(out)
                     if notation == "billboard":
                         labels.append(entry["billboard_notation"])
