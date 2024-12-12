@@ -359,18 +359,18 @@ class ChordDataProcessor:
         #scalar is probably unnecessary for spectro/chroma data
         self.labels = self.label_encoder.fit_transform(self.labels)
 
-    def prepare_data(self):
+    def prepare_data(self, seq_length=16):
         """Prepares features and labels for sequential or tabular processing."""
         if self.process_sequential:
             X_sequences, y_sequences = [], []
-            num_samples = len(self.features) - self.seq_length + 1
+            num_samples = len(self.features) - seq_length + 1
 
             if num_samples <= 0:
                 raise ValueError("Not enough data for the given sequence length.")
 
             for i in range(num_samples):
-                X_seq = self.features[i : i + self.seq_length]
-                y_seq = self.labels[i + self.seq_length // 2]
+                X_seq = self.features[i : i + seq_length]
+                y_seq = self.labels[i + seq_length // 2]
                 X_sequences.append(X_seq)
                 y_sequences.append(y_seq)
 
@@ -415,6 +415,6 @@ class ChordDataProcessor:
         """Combines all steps into one pipeline."""
         self.load_chord_data(chord_json_path, notation, mode, jsontype, audio_path)
         self.preprocess_data()
-        self.prepare_data()
+        self.prepare_data(seq_length=seq_length)
         self.synchronize_features_and_labels()
         return self.build_data_loaders(batch_size=batch_size, seq_length=seq_length, test_size=test_size, random_state=random_state)
