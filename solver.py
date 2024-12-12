@@ -7,6 +7,13 @@ from enum import Enum
 from pathlib import Path
 from tqdm.notebook import tqdm
 from torch.utils.data import DataLoader
+import utils.model_utils as model_utils
+import uuid
+import os
+import json
+
+base_dir = os.path.dirname(os.path.realpath(__file__))
+pickle_dir_name = "pickle_jar"
 
 
 class TrialMetric(Enum):
@@ -32,6 +39,7 @@ class Solver:
         warmup_epochs=0,
         dtype="float16",
         optuna_prune=False,
+        run_name=None,
         **kwargs,
     ):
         self.device = device
@@ -48,13 +56,15 @@ class Solver:
         self.train_dataloader = DataLoader(
             dataset=train_dataloader.dataset, batch_size=self.batch_size, shuffle=True
         )  # workaround to allow griddy of batch_size
-        #self.train_dataloader = train_dataloader
+        # self.train_dataloader = train_dataloader
         self.valid_dataloader = valid_dataloader
 
         self.model = model.to(self.device)
         self.optimizer = optimizer
         self.criterion = criterion
         self.scheduler = scheduler
+
+        self.run_name = run_name
 
         # if self.dtype == 'float16':
         #     self.model = self.model.half()
@@ -236,6 +246,27 @@ class Solver:
         if plot_results:
             self.plot_curves(self.model.__class__.__name__)
 
+        print(f"Base dir: {base_dir}")
+
+        # Save pickle file for pickle jar
+        path = f'{self.run_name}_' if self.run_name is not None else ""
+        model_name = f"{self.model.__class__.__name__}_{path}{uuid.uuid4()}"
+        print(f"Model name: {model_name}")
+
+        # Make pickle directory if it doesn't exist
+        pickle_dir = os.path.join(base_dir, f"{pickle_dir_name}{os.path.sep}{model_name}")
+        os.makedirs(pickle_dir, exist_ok=True)
+        self.best_model = copy.deepcopy(self.model)
+        torch.save(
+            self.best_model.state_dict(),
+            f"{pickle_dir}{os.path.sep}{self.model.__class__.__name__}_best_model.pth",
+        )
+
+        model_utils.save_history(
+            self,
+            f"{pickle_dir}{os.path.sep}{model_name}.pkl",
+        )
+
         match trial_metric:
             case TrialMetric.LOSS:
                 return best_loss
@@ -289,6 +320,7 @@ class Solver:
         plt.legend(loc="lower right", frameon=False)
         plt.tight_layout()
         plt.savefig(f"{Path(__file__).parent}/figures/{file_prefix}_accuracy.png")
+        plt.show()
         plt.close()
 
         # Plot loss curves
@@ -308,4 +340,5 @@ class Solver:
         plt.legend(loc="upper right", frameon=False)
         plt.tight_layout()
         plt.savefig(f"{Path(__file__).parent}/figures/{file_prefix}_loss.png")
+        plt.show()
         plt.close()

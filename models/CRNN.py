@@ -111,12 +111,6 @@ class CRNNModelv3(nn.Module):
         x = self.fc(x)  # (batch_size, num_classes)
 
         return x
-    
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 
 class CRNNModelv2(nn.Module):
     def __init__(
@@ -230,7 +224,6 @@ class CRNNModelv2(nn.Module):
             param.requires_grad = True
         for param in self.lstm.parameters():
             param.requires_grad = True
-
 
 class CRNNModelv1(nn.Module):
     def __init__(
