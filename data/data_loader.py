@@ -13,7 +13,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 from scipy import stats
-
+from pydub import AudioSegment
 from utils.chord_remap import remap_chord_label, CullMode
 import json
 
@@ -516,6 +516,19 @@ class ChordDataProcessor:
         print(f"Loaded features shape: {self.features.shape}")
         print(f"Loaded labels shape: {self.labels.shape}")
 
+    def convert_mp3_to_wav(self, mp3_file: Path, wav_file: Path):
+        """
+        Convert an MP3 file to WAV format.
+        
+        Args:
+            mp3_file: Path to the MP3 file.
+            wav_file: Path where the WAV file should be saved.
+        """
+        if not wav_file.exists():  # Only convert if WAV file doesn't already exist
+            audio = AudioSegment.from_file(mp3_file, format="mp3")
+            audio.export(wav_file, format="wav")
+
+
     def load_chord_data_librosa(self, chord_json_path, seq_length=8, n_chroma=12, n_fft=2048, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd())):
         """
         Loads chord data from the JSON file and extracts features/labels using librosa.
@@ -530,18 +543,29 @@ class ChordDataProcessor:
             jsontype: JSON format ('keyed' or other).
             audio_path: Directory where audio files are located.
         """
-        with open(Path(chord_json_path), "r") as f:
-            chord_data = json.load(f)
+        audio_dir = Path(audio_path)
+        wav_dir = audio_dir / "wavs"  # Directory to store converted WAV files
+        wav_dir.mkdir(exist_ok=True)  # Ensure the WAV directory exists
 
         features = []
         labels = []
 
+        with open(chord_json_path, "r") as f:
+            chord_data = json.load(f)
+
         if jsontype == "keyed":
             for key, value in chord_data.items():
                 try:
-                    audio_file = f"{audio_path}/{value['filename'].replace('.mp3', '.wav')}"  # Use WAV files
+                    original_file = audio_dir / value["filename"]  # Original file (MP3 or WAV)
+                    if original_file.suffix == ".mp3":
+                        wav_file = wav_dir / original_file.with_suffix(".wav").name
+                        # Convert MP3 to WAV if necessary
+                        self.convert_mp3_to_wav(original_file, wav_file)
+                    else:
+                        wav_file = original_file  # Use WAV file directly
+
                     duration = value['duration(s)']
-                    y, sr = librosa.load(audio_file, sr=None)  # Load with librosa
+                    y, sr = librosa.load(wav_file, sr=441000)  # Load with librosa
                     num_samples = int(duration * sr)
                     hop_length = num_samples // seq_length
 
