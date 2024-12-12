@@ -294,6 +294,7 @@ class ChordDataProcessor:
             n_chroma=12,  # 12 pitch classes
         )
         chromagram = chroma_transform(waveform)
+        #print(f"Chromagram shape: {chromagram.shape}")
         return chromagram
     
     def compute_spectrogram_torchaudio(waveform: torch.Tensor, n_fft: int = 2048, hop_length: int = 512):
@@ -347,8 +348,8 @@ class ChordDataProcessor:
                 except KeyError as e:
                     print(f"Skipping entry {entry['filename']} due to missing key: {e}")
 
-        self.features = np.array(features)
-        self.labels = np.array(labels)
+        self.features = np.array(features).squeeze()
+        self.labels = np.array(labels).squeeze()
 
         print(f"Loaded features shape: {self.features.shape}")
         print(f"Loaded labels shape: {self.labels.shape}")
