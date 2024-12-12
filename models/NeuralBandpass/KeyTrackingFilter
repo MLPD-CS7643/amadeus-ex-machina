@@ -1,0 +1,90 @@
+import torch
+import torch.nn as nn
+import torchaudio.transforms as T
+import torchaudio.functional as F
+
+class KeytrackingBandpassFilter(nn.Module):
+    def __init__(
+        self,
+        sample_rate=44100,
+        min_lowpass_freq=0,
+        max_lowpass_freq=60,
+        min_highpass_freq=2000,
+        max_highpass_freq=20000,
+        filter_slope=1.0,
+        learnable=True
+    ):
+        super().__init__()
+        self.sample_rate = sample_rate
+        
+        # Learnable parameters for filter bounds
+        if learnable:
+            self.lowpass_freq = nn.Parameter(
+                torch.tensor(max_lowpass_freq/2.0)
+            )
+            self.highpass_freq = nn.Parameter(
+                torch.tensor((min_highpass_freq + max_highpass_freq)/2.0)
+            )
+            self.slope = nn.Parameter(torch.tensor(filter_slope))
+        else:
+            self.register_buffer('lowpass_freq', torch.tensor(max_lowpass_freq/2.0))
+            self.register_buffer('highpass_freq', torch.tensor((min_highpass_freq + max_highpass_freq)/2.0))
+            self.register_buffer('slope', torch.tensor(filter_slope))
+            
+        # Store bounds as buffers
+        self.register_buffer('min_lowpass_freq', torch.tensor(min_lowpass_freq))
+        self.register_buffer('max_lowpass_freq', torch.tensor(max_lowpass_freq))
+        self.register_buffer('min_highpass_freq', torch.tensor(min_highpass_freq))
+        self.register_buffer('max_highpass_freq', torch.tensor(max_highpass_freq))
+        
+    def compute_adaptive_frequencies(self, x):
+        """
+        Compute adaptive filter frequencies based on input signal characteristics
+        """
+        # Use moving average to estimate local signal properties
+        window_size = 1024
+        ma = F.sliding_window_averaging(x, window_size)
+        
+        # Compute signal statistics
+        mean_energy = torch.mean(torch.abs(ma), dim=-1)
+        
+        # Scale the learnable parameters based on signal statistics
+        lowpass = torch.clamp(
+            self.lowpass_freq * (1 + 0.1 * mean_energy),
+            self.min_lowpass_freq,
+            self.max_lowpass_freq
+        )
+        
+        highpass = torch.clamp(
+            self.highpass_freq * (1 + 0.1 * mean_energy),
+            self.min_highpass_freq,
+            self.max_highpass_freq
+        )
+        
+        return lowpass, highpass
+        
+    def forward(self, x):
+        """
+        Apply keytracking bandpass filter to input
+        x: Input tensor of shape (batch_size, channels, samples)
+        """
+        # Compute adaptive frequencies
+        lowpass_freq, highpass_freq = self.compute_adaptive_frequencies(x)
+        
+        # Apply lowpass filter
+        x_lowpass = F.lowpass_biquad(
+            x,
+            self.sample_rate,
+            lowpass_freq,
+            Q=self.slope
+        )
+        
+        # Apply highpass filter
+        x_filtered = F.highpass_biquad(
+            x_lowpass,
+            self.sample_rate,
+            highpass_freq,
+            Q=self.slope
+        )
+        
+        return x_filtered
