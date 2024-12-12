@@ -15,6 +15,7 @@ class TrialMetric(Enum):
     ACCURACY = 1
     # add more as needed
 
+
 class Solver:
     def __init__(
         self,
@@ -46,8 +47,9 @@ class Solver:
         self.direction = direction  # direction to optimize loss function, not used atm but needed for griddy
 
         self.train_dataloader = DataLoader(
-            train_dataloader.dataset, batch_size=self.batch_size, shuffle=False
+            dataset=train_dataloader.dataset, batch_size=self.batch_size, shuffle=True
         )  # workaround to allow griddy of batch_size
+        #self.train_dataloader = train_dataloader
         self.valid_dataloader = valid_dataloader
 
         self.model = model.to(self.device)
@@ -108,7 +110,13 @@ class Solver:
 
         return total_loss, avg_loss, accuracy
 
-    def train_and_evaluate(self, trial=None, trial_metric=TrialMetric.LOSS, plot_results=False, kFolds=None):
+    def train_and_evaluate(
+        self,
+        trial=None,
+        trial_metric=TrialMetric.LOSS,
+        plot_results=False,
+        verbose=True,
+    ):
         train_loader = self.train_dataloader
         valid_loader = self.valid_dataloader
         if kFolds is not None:
@@ -118,9 +126,10 @@ class Solver:
         best_loss = float("inf")
         best_val_accuracy = 0
         for epoch_idx in range(self.epochs):
-            print("-----------------------------------")
-            print(f"Epoch {epoch_idx + 1}")
-            print("-----------------------------------")
+            if verbose:
+                print("-----------------------------------")
+                print(f"Epoch {epoch_idx + 1}")
+                print("-----------------------------------")
 
             if epoch_idx < self.warmup_epochs:
                 self.__lr_warmup(epoch_idx + 1)
@@ -131,10 +140,13 @@ class Solver:
             total_correct = 0
             total_samples = 0
 
-            # Create progress bar for batches
-            progress_bar = tqdm(train_loader, desc=f"Training", leave=True)
+            loader = (
+                tqdm(train_loader, desc=f"Training", leave=True)
+                if verbose
+                else train_loader
+            )
 
-            for inputs, labels in progress_bar:
+            for inputs, labels in loader:
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
 
@@ -155,9 +167,13 @@ class Solver:
                 total_samples += labels.size(0)
 
                 # Update progress bar description
-                progress_bar.set_postfix(
-                    {"loss": f"{loss.item():.4f}", "accuracy": f"{batch_accuracy:.4f}"}
-                )
+                if verbose:
+                    loader.set_postfix(
+                        {
+                            "loss": f"{loss.item():.4f}",
+                            "accuracy": f"{batch_accuracy:.4f}",
+                        }
+                    )
 
             # Calculate epoch-level training metrics
             avg_train_loss = total_loss / total_samples
@@ -181,13 +197,13 @@ class Solver:
             self.train_loss_history.append(avg_train_loss)
             self.valid_loss_history.append(avg_val_loss)
 
-            print(
-                f"Training Loss: {avg_train_loss:.4f}. Validation Loss: {avg_val_loss:.4f}."
-            )
-            print(
-                f"Training Accuracy: {train_accuracy:.4f}. Validation Accuracy: {val_accuracy:.4f}."
-            )
-
+            if verbose:
+                print(
+                    f"Training Loss: {avg_train_loss:.4f}. Validation Loss: {avg_val_loss:.4f}."
+                )
+                print(
+                    f"Training Accuracy: {train_accuracy:.4f}. Validation Accuracy: {val_accuracy:.4f}."
+                )
             # Optuna injection
             if trial:
                 match trial_metric:
@@ -222,7 +238,7 @@ class Solver:
 
         if plot_results:
             self.plot_curves(self.model.__class__.__name__)
-        
+
         match trial_metric:
             case TrialMetric.LOSS:
                 return best_loss
@@ -239,30 +255,61 @@ class Solver:
     def plot_curves(self, file_prefix):
         epochs = [i + 1 for i in range(len(self.train_accuracy_history))]
 
+        plt.rcParams.update(
+            {
+                "font.size": 8,
+                "axes.titlesize": 9,
+                "axes.labelsize": 8,
+                "legend.fontsize": 7,
+                "xtick.labelsize": 7,
+                "ytick.labelsize": 7,
+                "figure.dpi": 600,
+                "savefig.dpi": 600,
+            }
+        )
+
+        width, height = 3.5, 2.5
+
         # Plot accuracy curves
-        plt.figure(figsize=(8, 6))
+        plt.figure(figsize=(width, height))
         plt.plot(
-            epochs, self.train_accuracy_history, marker="o", label="Training Accuracy"
+            epochs,
+            self.train_accuracy_history,
+            label="Training Accuracy",
+            linewidth=1.5,
         )
         plt.plot(
-            epochs, self.valid_accuracy_history, marker="s", label="Validation Accuracy"
+            epochs,
+            self.valid_accuracy_history,
+            label="Validation Accuracy",
+            linewidth=1.5,
+            linestyle="--",
         )
         plt.title("Accuracy Curve")
         plt.xlabel("Epochs")
         plt.ylabel("Accuracy")
-        plt.ylim(0, 1)
-        plt.legend()
+        plt.ylim(0, 1.0)
+        plt.grid(True, linestyle=":", linewidth=0.8)
+        plt.legend(loc="lower right", frameon=False)
+        plt.tight_layout()
         plt.savefig(f"{Path(__file__).parent}/figures/{file_prefix}_accuracy.png")
-        plt.show()
+        plt.close()
 
         # Plot loss curves
-        plt.figure(figsize=(8, 6))
-        plt.plot(epochs, self.train_loss_history, marker="o", label="Training Loss")
-        plt.plot(epochs, self.valid_loss_history, marker="s", label="Validation Loss")
+        plt.figure(figsize=(width, height))
+        plt.plot(epochs, self.train_loss_history, label="Training Loss", linewidth=1.5)
+        plt.plot(
+            epochs,
+            self.valid_loss_history,
+            label="Validation Loss",
+            linewidth=1.5,
+            linestyle="--",
+        )
         plt.title("Loss Curve")
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
-        # Usually, no fixed ylim for loss, as it can vary widely
-        plt.legend()
+        plt.grid(True, linestyle=":", linewidth=0.8)
+        plt.legend(loc="upper right", frameon=False)
+        plt.tight_layout()
         plt.savefig(f"{Path(__file__).parent}/figures/{file_prefix}_loss.png")
-        plt.show()
+        plt.close()

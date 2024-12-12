@@ -12,6 +12,8 @@ from torch.utils.data import TensorDataset, DataLoader
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
+from scipy import stats
+
 from utils.chord_remap import remap_chord_label, CullMode
 from scipy import stats
 
@@ -25,6 +27,8 @@ class MirDataProcessor:
         batch_size=64,
         seq_length=16,
         process_sequential=False,
+        overlap_sequence=False,
+        use_median=True,
     ):
         """
         Encapsulates utilities for downloading publicly available MIR datasets and preprocessing them to be
@@ -34,15 +38,23 @@ class MirDataProcessor:
         :param batch_size: batch used utilized by the pytorch dataloaders
         :param seq_length: length of sequences projected in sequential data processing
         :param process_sequential: flag to determine whether to process the data as sequential or tabular data
+        :param overlap_sequence: flag to determine whether sequences can overlap or not
+        :param use_median: flag to determine whether to take the median chord annotation or mode
         """
         self.raw_data_dir = Path(__file__).parent / "raw"
-        self.processed_data_dir = Path(output_dir) if output_dir else Path(__file__).parent / "processed"
+        self.processed_data_dir = (
+            Path(output_dir) if output_dir else Path(__file__).parent / "processed"
+        )
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.process_sequential = process_sequential
+        self.overlap_sequence = overlap_sequence
+        self.use_median = use_median
 
         # Define file paths
         self.combined_csv_path = self.processed_data_dir / "combined_data.csv"
+        self.root_csv_path = self.processed_data_dir / "root_data.csv"
+        self.chord_class_csv_path = self.processed_data_dir / "chord_class_data.csv"
         self.scaler_path = self.processed_data_dir / "scaler.pkl"
         self.label_encoder_path = self.processed_data_dir / "label_encoder.pkl"
 
@@ -58,12 +70,18 @@ class MirDataProcessor:
         if download:
             self.dataset.download(cleanup=True, force_overwrite=True)
 
-    def process_billboard_data(self, cull_mode=CullMode.REMAP):
+    def process_billboard_data(self, combined_notation=True, cull_mode=CullMode.BYPASS, chord_vocab='majmin7inv', log_fail_only=False):
         """Processes the raw data and creates a combined CSV file for training."""
         combined_csv_path = self.combined_csv_path
+        root_csv_path = self.root_csv_path
+        chord_class_csv_path = self.chord_class_csv_path
 
         if combined_csv_path.exists():
             combined_csv_path.unlink()
+        if root_csv_path.exists():
+            root_csv_path.unlink()
+        if chord_class_csv_path.exists():
+            chord_class_csv_path.unlink()
 
         track_ids = self.dataset.track_ids
         print(f"Found {len(track_ids)} tracks in the dataset.")
@@ -82,7 +100,17 @@ class MirDataProcessor:
             # Get chord annotations using mirdata
             try:
                 # Singular library installed song threw an error when accessing this property
-                chord_data = track.chords_full
+                match chord_vocab:
+                    case 'full':
+                        chord_data = track.chords_full
+                    case 'majmin':
+                        chord_data = track.chords_majmin
+                    case 'majmininv':
+                        chord_data = track.chords_majmininv
+                    case 'majmin7':
+                        chord_data = track.chords_majmin7
+                    case 'majmin7inv':
+                        chord_data = track.chords_majmin7inv
             except ValueError:
                 print(f"Invalid chord data for track {track_id}, skipping.")
                 continue
@@ -94,16 +122,115 @@ class MirDataProcessor:
 
             chord_intervals = chord_data.intervals
             chord_labels = chord_data.labels
+            chord_roots = []
+            chord_classes = []
             for i, chord_label in enumerate(chord_labels):
                 remapped_root, remapped_chord_class = remap_chord_label(
                     chord_label, cull_mode
                 )
-                chord_labels[i] = (
-                    "N"
-                    if remapped_root == "N"
-                    else f"{remapped_root}:{remapped_chord_class}"
-                )
+                if combined_notation:
+                    chord_labels[i] = (
+                        "N"
+                        if remapped_root == "N"
+                        else f"{remapped_root}:{remapped_chord_class}"
+                    )
+                else:
+                    chord_roots.append(remapped_root)
+                    chord_classes.append(remapped_chord_class)
 
+            # Use mir_eval to get the chord labels at the chroma timestamps
+            # This function maps each timestamp to the corresponding chord label
+            if combined_notation:
+                labels_at_times = np.array(
+                    mir_eval.util.interpolate_intervals(
+                        chord_intervals, chord_labels, timestamps, fill_value="N"
+                    )
+                )
+            else:
+                root_labels_at_times = np.array(
+                    mir_eval.util.interpolate_intervals(
+                        chord_intervals, chord_roots, timestamps, fill_value="N"
+                    )
+                )
+                chord_class_labels_at_times = np.array(
+                    mir_eval.util.interpolate_intervals(
+                        chord_intervals, chord_classes, timestamps, fill_value="N"
+                    )
+                )
+            if self.process_sequential:
+                if not log_fail_only:
+                    print("Processing dataset as sequential data")
+                # Combine song_id, chroma features, and labels
+                song_id_column = np.full((chroma_array.shape[0], 1), track_id)
+                if combined_notation:
+                    data_with_labels = np.hstack(
+                        (song_id_column, chroma_array, labels_at_times.reshape(-1, 1))
+                    )
+                else:
+                    root_data_with_labels = np.hstack(
+                        (song_id_column, chroma_array, root_labels_at_times.reshape(-1, 1))
+                    )
+                    chord_class_data_with_labels = np.hstack(
+                        (song_id_column, chroma_array, chord_class_labels_at_times.reshape(-1, 1))
+                    )
+            else:
+                if not log_fail_only:
+                    print("Processing dataset as tabular data")
+                if combined_notation:
+                    data_with_labels = np.hstack(
+                        (chroma_array, labels_at_times.reshape(-1, 1))
+                    )
+                else:
+                    root_data_with_labels = np.hstack(
+                        (chroma_array, root_labels_at_times.reshape(-1, 1))
+                    )
+                    chord_class_data_with_labels = np.hstack(
+                        (chroma_array, chord_class_labels_at_times.reshape(-1, 1))
+                    )
+            if combined_notation:
+                segment_df = pd.DataFrame(data_with_labels) # linter complains but the logic is always reached
+                segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
+            else:
+                root_df = pd.DataFrame(root_data_with_labels)
+                chord_class_df = pd.DataFrame(chord_class_data_with_labels)
+                root_df.to_csv(root_csv_path, mode="a", index=False, header=False)
+                chord_class_df.to_csv(chord_class_csv_path, mode="a", index=False, header=False)
+            if not log_fail_only:
+                print(f"Processed track {track_id} and appended data to combined CSV.")
+        if combined_notation:
+            print(f"All data processed and saved to {combined_csv_path}")
+        else:
+            print(f"Root data processed and saved to {root_csv_path}")
+            print(f"Chord class data processed and saved to {chord_class_csv_path}")
+
+    def process_wav_data(self, max_tracks=None):
+        """Processes the raw wav data and creates a combined CSV file for training."""
+        combined_csv_path = self.combined_csv_path
+
+        if combined_csv_path.exists():
+            combined_csv_path.unlink()
+
+        track_ids = self.dataset.track_ids
+        print(f"Found {len(track_ids)} tracks in the dataset.")
+
+        num_tracks = 0
+        for track_id in track_ids:
+            if max_tracks is not None:
+                if num_tracks == max_tracks:
+                    break
+            num_tracks += 1
+            track = self.dataset.track(track_id)
+
+            wav, sample_rate = track.audio_mix
+
+            chord_data = mirdata.datasets.guitarset.load_chords(track.jams_path, True)
+
+            chord_intervals = chord_data.intervals
+            chord_labels = chord_data.labels
+
+            timestamps = range(0, wav.shape[0])
+            #converting interval times to the corresponding wav index
+            chord_intervals = chord_intervals * sample_rate
             # Use mir_eval to get the chord labels at the chroma timestamps
             # This function maps each timestamp to the corresponding chord label
             labels_at_times = np.array(
@@ -114,16 +241,11 @@ class MirDataProcessor:
 
             if self.process_sequential:
                 print("Processing dataset as sequential data")
-                # Combine song_id, chroma features, and labels
-                song_id_column = np.full((chroma_array.shape[0], 1), track_id)
-                data_with_labels = np.hstack(
-                    (song_id_column, chroma_array, labels_at_times.reshape(-1, 1))
-                )
+                track_id_column = np.full((wav.shape[0], 1), track_id)
+                data_with_labels = np.column_stack((track_id_column, wav, labels_at_times))
             else:
                 print("Processing dataset as tabular data")
-                data_with_labels = np.hstack(
-                    (chroma_array, labels_at_times.reshape(-1, 1))
-                )
+                data_with_labels = np.column_stack((wav, labels_at_times))
 
             segment_df = pd.DataFrame(data_with_labels)
             segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
@@ -185,10 +307,17 @@ class MirDataProcessor:
 
     def prepare_model_data(self, nrows=None):
         """Prepares the data for training by loading the combined CSV and processing it."""
-        print("Loading the combined CSV file...")
-        combined_csv_path = self.combined_csv_path
+        print(f"Loading the {dataset} CSV file...")
 
-        combined_df = pd.read_csv(combined_csv_path, header=None, nrows=nrows)
+        match dataset:
+            case 'combined':
+                csv_path = self.combined_csv_path
+            case 'root':
+                csv_path = self.root_csv_path
+            case 'chord_class':
+                csv_path = self.chord_class_csv_path
+
+        combined_df = pd.read_csv(csv_path, header=None, nrows=nrows)
         data = combined_df.values
 
         if self.process_sequential:
@@ -225,11 +354,9 @@ class MirDataProcessor:
             y_sequences = np.ndarray((0,))
 
             print("Creating sequences of chromagram data within song boundaries...")
-            # Group data by song_id
             unique_song_ids = np.unique(song_ids)
 
             for song_id in unique_song_ids:
-                # Get indices for this song
                 song_indices = np.where(song_ids == song_id)[0]
                 song_features = prepped_features[song_indices,0]
                 song_labels = prepped_labels[song_indices]
@@ -267,10 +394,10 @@ class MirDataProcessor:
         print("Data preparation complete.")
         return X_train, X_test, y_train, y_test
 
-    def build_data_loaders(self, nrows=None, device="cuda"):
+    def build_data_loaders(self, dataset='combined', nrows=None, device="cuda"):
         """Creates data loaders from the preprocessed model data."""
         print("Preparing model data...")
-        X_train, X_test, y_train, y_test = self.prepare_model_data(nrows=nrows)
+        X_train, X_test, y_train, y_test = self.prepare_model_data(dataset=dataset, nrows=nrows)
 
         # Determine the number of classes
         num_classes = len(self.label_encoder.classes_)
@@ -291,7 +418,7 @@ class MirDataProcessor:
         # Create data loaders
         print("Creating DataLoaders for training and testing datasets...")
         train_loader = DataLoader(
-            train_dataset, batch_size=self.batch_size, shuffle=False, num_workers=0
+            train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
         )
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
 
