@@ -17,6 +17,7 @@ venv.bak/
 .ipynb_checkpoints
 .vscode
 .DS_Store
+.png
 
 # Distribution / packaging
 .Python
@@ -57,8 +58,11 @@ datagen/fx_out/*/*.txt
 # Don't upload massive data files to git
 data/raw/
 data/processed/
+data/generation
 datagen/chords/
 datagen/sf2/
+
+texturebias_experiment/timbral_bias_datasets/*
 *.zip
 *.pkl
 *.csv
