@@ -1,15 +1,19 @@
 name: amadeus-ex-machina
 channels:
+  - pytorch
+  - nvidia
+  - conda-forge
   - defaults
 dependencies:
   - python==3.11
+  - pytorch=2.5.1
+  - cudatoolkit=11.8
+  - torchaudio
   - numpy
   - pyyaml
   - matplotlib
   - jupyter
   - pytest
-  - pytorch
-  - torchvision
   - black
   - pandas
   - scipy
@@ -18,7 +22,6 @@ dependencies:
   - tqdm
   - pip
   - pip:
-      - torchaudio
       - librosa
       - jams
       - mido
@@ -28,4 +31,6 @@ dependencies:
       - mirdata
       - yt_dlp
       - mir_eval
+      - plotly
       - tqdm-joblib
+      - mutagen

@@ -11,6 +11,8 @@ import torchaudio.prototype.transforms as PT
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
+from scipy import stats
+
 from utils.chord_remap import remap_chord_label, CullMode
 import json
 
@@ -19,10 +21,13 @@ class MirDataProcessor:
     def __init__(
         self,
         download=False,
+        output_dir=None,
         dataset_name="billboard",
         batch_size=64,
         seq_length=16,
         process_sequential=False,
+        overlap_sequence=False,
+        use_median=True,
     ):
         """
         Encapsulates utilities for downloading publicly available MIR datasets and preprocessing them to be
@@ -32,15 +37,23 @@ class MirDataProcessor:
         :param batch_size: batch used utilized by the pytorch dataloaders
         :param seq_length: length of sequences projected in sequential data processing
         :param process_sequential: flag to determine whether to process the data as sequential or tabular data
+        :param overlap_sequence: flag to determine whether sequences can overlap or not
+        :param use_median: flag to determine whether to take the median chord annotation or mode
         """
         self.raw_data_dir = Path(__file__).parent / "raw"
-        self.processed_data_dir = Path(__file__).parent / "processed"
+        self.processed_data_dir = (
+            Path(output_dir) if output_dir else Path(__file__).parent / "processed"
+        )
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.process_sequential = process_sequential
+        self.overlap_sequence = overlap_sequence
+        self.use_median = use_median
 
         # Define file paths
         self.combined_csv_path = self.processed_data_dir / "combined_data.csv"
+        self.root_csv_path = self.processed_data_dir / "root_data.csv"
+        self.chord_class_csv_path = self.processed_data_dir / "chord_class_data.csv"
         self.scaler_path = self.processed_data_dir / "scaler.pkl"
         self.label_encoder_path = self.processed_data_dir / "label_encoder.pkl"
 
@@ -56,12 +69,18 @@ class MirDataProcessor:
         if download:
             self.dataset.download(cleanup=True, force_overwrite=True)
 
-    def process_billboard_data(self, cull_mode=CullMode.REMAP):
+    def process_billboard_data(self, combined_notation=True, cull_mode=CullMode.BYPASS, chord_vocab='majmin7inv', log_fail_only=False):
         """Processes the raw data and creates a combined CSV file for training."""
         combined_csv_path = self.combined_csv_path
+        root_csv_path = self.root_csv_path
+        chord_class_csv_path = self.chord_class_csv_path
 
         if combined_csv_path.exists():
             combined_csv_path.unlink()
+        if root_csv_path.exists():
+            root_csv_path.unlink()
+        if chord_class_csv_path.exists():
+            chord_class_csv_path.unlink()
 
         track_ids = self.dataset.track_ids
         print(f"Found {len(track_ids)} tracks in the dataset.")
@@ -80,7 +99,17 @@ class MirDataProcessor:
             # Get chord annotations using mirdata
             try:
                 # Singular library installed song threw an error when accessing this property
-                chord_data = track.chords_full
+                match chord_vocab:
+                    case 'full':
+                        chord_data = track.chords_full
+                    case 'majmin':
+                        chord_data = track.chords_majmin
+                    case 'majmininv':
+                        chord_data = track.chords_majmininv
+                    case 'majmin7':
+                        chord_data = track.chords_majmin7
+                    case 'majmin7inv':
+                        chord_data = track.chords_majmin7inv
             except ValueError:
                 print(f"Invalid chord data for track {track_id}, skipping.")
                 continue
@@ -92,50 +121,100 @@ class MirDataProcessor:
 
             chord_intervals = chord_data.intervals
             chord_labels = chord_data.labels
+            chord_roots = []
+            chord_classes = []
             for i, chord_label in enumerate(chord_labels):
                 remapped_root, remapped_chord_class = remap_chord_label(
                     chord_label, cull_mode
                 )
-                chord_labels[i] = (
-                    "N"
-                    if remapped_root == "N"
-                    else f"{remapped_root}:{remapped_chord_class}"
-                )
+                if combined_notation:
+                    chord_labels[i] = (
+                        "N"
+                        if remapped_root == "N"
+                        else f"{remapped_root}:{remapped_chord_class}"
+                    )
+                else:
+                    chord_roots.append(remapped_root)
+                    chord_classes.append(remapped_chord_class)
 
             # Use mir_eval to get the chord labels at the chroma timestamps
             # This function maps each timestamp to the corresponding chord label
-            labels_at_times = np.array(
-                mir_eval.util.interpolate_intervals(
-                    chord_intervals, chord_labels, timestamps, fill_value="N"
-                )
-            )
-
-            if self.process_sequential:
-                print("Processing dataset as sequential data")
-                # Combine song_id, chroma features, and labels
-                song_id_column = np.full((chroma_array.shape[0], 1), track_id)
-                data_with_labels = np.hstack(
-                    (song_id_column, chroma_array, labels_at_times.reshape(-1, 1))
+            if combined_notation:
+                labels_at_times = np.array(
+                    mir_eval.util.interpolate_intervals(
+                        chord_intervals, chord_labels, timestamps, fill_value="N"
+                    )
                 )
             else:
-                print("Processing dataset as tabular data")
-                data_with_labels = np.hstack(
-                    (chroma_array, labels_at_times.reshape(-1, 1))
+                root_labels_at_times = np.array(
+                    mir_eval.util.interpolate_intervals(
+                        chord_intervals, chord_roots, timestamps, fill_value="N"
+                    )
                 )
+                chord_class_labels_at_times = np.array(
+                    mir_eval.util.interpolate_intervals(
+                        chord_intervals, chord_classes, timestamps, fill_value="N"
+                    )
+                )
+            if self.process_sequential:
+                if not log_fail_only:
+                    print("Processing dataset as sequential data")
+                # Combine song_id, chroma features, and labels
+                song_id_column = np.full((chroma_array.shape[0], 1), track_id)
+                if combined_notation:
+                    data_with_labels = np.hstack(
+                        (song_id_column, chroma_array, labels_at_times.reshape(-1, 1))
+                    )
+                else:
+                    root_data_with_labels = np.hstack(
+                        (song_id_column, chroma_array, root_labels_at_times.reshape(-1, 1))
+                    )
+                    chord_class_data_with_labels = np.hstack(
+                        (song_id_column, chroma_array, chord_class_labels_at_times.reshape(-1, 1))
+                    )
+            else:
+                if not log_fail_only:
+                    print("Processing dataset as tabular data")
+                if combined_notation:
+                    data_with_labels = np.hstack(
+                        (chroma_array, labels_at_times.reshape(-1, 1))
+                    )
+                else:
+                    root_data_with_labels = np.hstack(
+                        (chroma_array, root_labels_at_times.reshape(-1, 1))
+                    )
+                    chord_class_data_with_labels = np.hstack(
+                        (chroma_array, chord_class_labels_at_times.reshape(-1, 1))
+                    )
+            if combined_notation:
+                segment_df = pd.DataFrame(data_with_labels) # linter complains but the logic is always reached
+                segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
+            else:
+                root_df = pd.DataFrame(root_data_with_labels)
+                chord_class_df = pd.DataFrame(chord_class_data_with_labels)
+                root_df.to_csv(root_csv_path, mode="a", index=False, header=False)
+                chord_class_df.to_csv(chord_class_csv_path, mode="a", index=False, header=False)
+            if not log_fail_only:
+                print(f"Processed track {track_id} and appended data to combined CSV.")
+        if combined_notation:
+            print(f"All data processed and saved to {combined_csv_path}")
+        else:
+            print(f"Root data processed and saved to {root_csv_path}")
+            print(f"Chord class data processed and saved to {chord_class_csv_path}")
 
-            segment_df = pd.DataFrame(data_with_labels)
-            segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
-
-            print(f"Processed track {track_id} and appended data to combined CSV.")
-
-        print(f"All data processed and saved to {combined_csv_path}")
-
-    def prepare_model_data(self, nrows=None):
+    def prepare_model_data(self, dataset, nrows=None):
         """Prepares the data for training by loading the combined CSV and processing it."""
-        print("Loading the combined CSV file...")
-        combined_csv_path = self.combined_csv_path
+        print(f"Loading the {dataset} CSV file...")
 
-        combined_df = pd.read_csv(combined_csv_path, header=None, nrows=nrows)
+        match dataset:
+            case 'combined':
+                csv_path = self.combined_csv_path
+            case 'root':
+                csv_path = self.root_csv_path
+            case 'chord_class':
+                csv_path = self.chord_class_csv_path
+
+        combined_df = pd.read_csv(csv_path, header=None, nrows=nrows)
         data = combined_df.values
 
         if self.process_sequential:
@@ -172,33 +251,82 @@ class MirDataProcessor:
             y_sequences = []
 
             print("Creating sequences of chromagram data within song boundaries...")
-            # Group data by song_id
             unique_song_ids = np.unique(song_ids)
 
             for song_id in unique_song_ids:
-                # Get indices for this song
                 song_indices = np.where(song_ids == song_id)[0]
-                song_features = prepped_features[song_indices]
+                song_features = prepped_features[song_indices, :]
                 song_labels = prepped_labels[song_indices]
 
-                num_samples = song_features.shape[0] - self.seq_length + 1
+                if self.overlap_sequence:
+                    num_samples = song_features.shape[0] - self.seq_length + 1
 
-                if num_samples <= 0:
-                    print(
-                        f"Song {song_id} has insufficient data for the given sequence length, skipping."
+                    if num_samples <= 0:
+                        print(
+                            f"Song {song_id} has insufficient data for seq_length {self.seq_length}, skipping."
+                        )
+                        continue
+                    
+                    for i in range(num_samples):
+                        X_seq = song_features[i : i + self.seq_length, :]
+                        y_seq = song_labels[
+                            i + self.seq_length // 2
+                        ]  # Using the label at the center of the sequence
+                        X_sequences.append(X_seq)
+                        y_sequences.append(y_seq)
+                else:
+                    # Calculate how many full sequences we can get
+                    num_instances = song_features.shape[0]
+                    remainder = num_instances % self.seq_length
+                    pad_amount = 0 if remainder == 0 else (self.seq_length - remainder)
+
+                    if pad_amount > 0:
+                        song_features = np.pad(
+                            song_features, ((0, pad_amount), (0, 0)), mode="constant"
+                        )
+                        song_labels = np.pad(
+                            song_labels,
+                            (0, pad_amount),
+                            mode="constant",
+                            constant_values=song_labels[-1],
+                        )
+
+                    num_instances_padded = song_features.shape[0]
+                    num_samples = num_instances_padded // self.seq_length
+
+                    if num_samples <= 0:
+                        print(
+                            f"Song {song_id} has insufficient data for seq_length {self.seq_length}, skipping."
+                        )
+                        continue
+
+                    input_dim = song_features.shape[1]
+                    track_X_seqs = song_features.reshape(
+                        (num_samples, self.seq_length, input_dim)
                     )
-                    continue
 
-                for i in range(num_samples):
-                    X_seq = song_features[i : i + self.seq_length, :]
-                    y_seq = song_labels[
-                        i + self.seq_length // 2
-                    ]  # Using the label at the center of the sequence
-                    X_sequences.append(X_seq)
-                    y_sequences.append(y_seq)
+                    track_y_seqs = song_labels.reshape((num_samples, self.seq_length))
+                    if self.use_median:
+                        track_y_seqs = track_y_seqs[:, self.seq_length // 2]  # center label
+                        y_sequences.append(track_y_seqs)
+                    # Use mode otherwise
+                    else:
+                        y_modes = stats.mode(track_y_seqs, 1)
+                        y_sequences.append(y_modes[0])
 
-            prepped_features = np.array(X_sequences)
-            prepped_labels = np.array(y_sequences)
+                    X_sequences.append(track_X_seqs)
+
+            if self.overlap_sequence:
+                prepped_features = np.array(X_sequences)
+                prepped_labels = np.array(y_sequences)
+            else:
+                X_sequences = np.concatenate(
+                    X_sequences, axis=0
+                )  # (N, seq_length, input_dim)
+                y_sequences = np.concatenate(y_sequences, axis=0)  # (N,)
+
+                prepped_features = X_sequences
+                prepped_labels = y_sequences
 
         # Split data into training and testing sets
         print("Splitting data into training and testing sets...")
@@ -209,10 +337,10 @@ class MirDataProcessor:
         print("Data preparation complete.")
         return X_train, X_test, y_train, y_test
 
-    def build_data_loaders(self, nrows=None, device="cuda"):
+    def build_data_loaders(self, dataset='combined', nrows=None, device="cuda"):
         """Creates data loaders from the preprocessed model data."""
         print("Preparing model data...")
-        X_train, X_test, y_train, y_test = self.prepare_model_data(nrows=nrows)
+        X_train, X_test, y_train, y_test = self.prepare_model_data(dataset=dataset, nrows=nrows)
 
         # Determine the number of classes
         num_classes = len(self.label_encoder.classes_)
@@ -257,8 +385,7 @@ class MirDataProcessor:
     
 
 class ChordDataProcessor:
-    def __init__(self, device="cpu", process_sequential=False):
-        self.process_sequential = process_sequential
+    def __init__(self, device="cpu"):
         self.device = device
         
         self.scaler = MinMaxScaler()
@@ -274,7 +401,7 @@ class ChordDataProcessor:
             waveform = waveform.mean(dim=0)
         return waveform, sr
 
-    def compute_chromagram_torchaudio(self, waveform: torch.Tensor, sr: int, n_fft: int = 2048, hop_length: int = 512):
+    def compute_chromagram_torchaudio(self, waveform: torch.Tensor, sr: int, n_chroma:int=12, n_fft: int = 2048, hop_length: int = 512):
         """
         Compute a chromagram using torchaudio.prototype.transforms.ChromaSpectrogram.
         
@@ -291,18 +418,18 @@ class ChordDataProcessor:
             sample_rate=sr,
             n_fft=n_fft,
             hop_length=hop_length,
-            n_chroma=12,  # 12 pitch classes
+            n_chroma=n_chroma,  # 12 pitch classes
         )
         chromagram = chroma_transform(waveform)
         #print(f"Chromagram shape: {chromagram.shape}")
         return chromagram
     
-    def compute_spectrogram_torchaudio(waveform: torch.Tensor, n_fft: int = 2048, hop_length: int = 512):
+    def compute_spectrogram_torchaudio(self, waveform: torch.Tensor, n_fft: int = 2048, hop_length: int = 512):
         """Compute a spectrogram using torchaudio."""
         spectrogram = T.Spectrogram(n_fft=n_fft, hop_length=hop_length, power=2.0)(waveform)
         return spectrogram
 
-    def load_chord_data(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd())):
+    def load_chord_data(self, chord_json_path, seq_length=8, n_chroma=12, n_fft=2048, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd())):
         #mode picks if the audio data is converted to "chroma" (chromagram) or "spectrogram"
         #json controls the json format because I am dumb and there are 2 types (use "keyed" for chordgen and (i think) fxgen, anything else will set it to texture bias format)
         #audio_path parent for the audio file dir, since the jsons have different formatting this will be different for keyed/entry
@@ -316,13 +443,18 @@ class ChordDataProcessor:
             for key, value in chord_data.items():
                 try:
                     audio_file = audio_path + "/"  + value["filename"]
+                    duration = value['duration(s)']
                     waveform, sr = self.load_audio(audio_file)
+                    num_samples = duration * sr
+                    hop_length = num_samples / seq_length
                     if mode == "chroma":
-                        chromagram = self.compute_chromagram_torchaudio(waveform, sr)
-                        features.append(chromagram.numpy())
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=hop_length)
+                        out = chromagram.numpy().reshape(seq_length, n_chroma)
+                        features.append(out)
                     if mode == "spectrogram":
-                        spectrogram = PT.Spectrogram()(waveform)
-                        features.append(spectrogram.numpy())
+                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=hop_length)
+                        out = spectrogram.numpy().reshape(seq_length, n_fft)
+                        features.append(out)
                     if notation == "billboard":
                         labels.append(value["billboard_notation"])
                     else:
@@ -335,12 +467,17 @@ class ChordDataProcessor:
                     fx_summary = "_".join(f"{key}_{value}" for key, value in entry['applied_fx'].items())
                     audio_file = audio_path + "/" + entry["processed_path"] + fx_summary + ".mp3"
                     waveform, sr = self.load_audio(audio_file)
+                    duration = entry['duration(s)']
+                    num_samples = duration * sr
+                    hop_length = num_samples / seq_length
                     if mode == "chroma":
-                        chromagram = self.compute_chromagram_torchaudio(waveform, sr)
-                        features.append(chromagram.numpy())
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=hop_length)
+                        out = chromagram.numpy().reshape(seq_length, n_chroma)
+                        features.append(out)
                     if mode == "spectrogram":
-                        spectrogram = PT.Spectrogram()(waveform)
-                        features.append(spectrogram.numpy())
+                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=hop_length)
+                        out = spectrogram.numpy().reshape(seq_length, n_fft)
+                        features.append(out)
                     if notation == "billboard":
                         labels.append(entry["billboard_notation"])
                     else:
@@ -360,27 +497,6 @@ class ChordDataProcessor:
         #scalar is probably unnecessary for spectro/chroma data
         self.labels = self.label_encoder.fit_transform(self.labels)
 
-    def prepare_data(self, seq_length=16):
-        """Prepares features and labels for sequential or tabular processing."""
-        if self.process_sequential:
-            X_sequences, y_sequences = [], []
-            num_samples = len(self.features) - seq_length + 1
-
-            if num_samples <= 0:
-                raise ValueError("Not enough data for the given sequence length.")
-
-            for i in range(num_samples):
-                X_seq = self.features[i : i + seq_length]
-                y_seq = self.labels[i + seq_length // 2]
-                X_sequences.append(X_seq)
-                y_sequences.append(y_seq)
-
-            self.features = np.array(X_sequences)
-            self.labels = np.array(y_sequences)
-
-        print(f"Prepared features shape: {self.features.shape}")
-        print(f"Prepared labels shape: {self.labels.shape}")
-
     def synchronize_features_and_labels(self):
         """Ensures features and labels have the same number of samples."""
         min_length = min(len(self.features), len(self.labels))
@@ -391,7 +507,7 @@ class ChordDataProcessor:
         self.features = self.features[:min_length]
         self.labels = self.labels[:min_length]
 
-    def build_data_loaders(self, batch_size=64, seq_length=16, test_size=0.2, random_state=42):
+    def build_data_loaders(self, batch_size=64, test_size=0.2, random_state=42):
         """Splits data into training/testing sets and creates DataLoaders."""
         self.synchronize_features_and_labels()  # Ensure consistency
 
@@ -412,10 +528,9 @@ class ChordDataProcessor:
 
         return train_loader, test_loader, num_classes
 
-    def process_all_and_build_loaders(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd()), batch_size=64, seq_length=16, test_size=0.2, random_state=42):
+    def process_all_and_build_loaders(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd()), batch_size=64, seq_length=8, n_chroma=12, n_fft=2048, test_size=0.2, random_state=42):
         """Combines all steps into one pipeline."""
-        self.load_chord_data(chord_json_path, notation, mode, jsontype, audio_path)
+        self.load_chord_data(chord_json_path, seq_length, n_chroma, n_fft, notation, mode, jsontype, audio_path)
         self.preprocess_data()
-        self.prepare_data(seq_length=seq_length)
         self.synchronize_features_and_labels()
-        return self.build_data_loaders(batch_size=batch_size, seq_length=seq_length, test_size=test_size, random_state=random_state)
+        return self.build_data_loaders(batch_size=batch_size, test_size=test_size, random_state=random_state)

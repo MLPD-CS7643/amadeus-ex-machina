@@ -61,7 +61,11 @@ data/processed/
 data/generation
 datagen/chords/
 datagen/sf2/
+
 texturebias_experiment/timbral_bias_datasets/*
+*.zip
+*.pkl
+*.csv
 
 # Secrets
 secrets/
