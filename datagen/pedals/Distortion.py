@@ -93,13 +93,13 @@ class Distortion:
                 'mode': 'soft'
             },
             'classic_distortion': {
-                'gain': 8.0,
+                'gain': 6.0,
                 'threshold': 0.4,
                 'mix': 0.5,
                 'mode': 'hard'
             },
             'fuzz': {
-                'gain': 12.0,
+                'gain': 8.0,
                 'threshold': 0.3,
                 'mix': 0.5,
                 'mode': 'hard'
