@@ -1,5 +1,9 @@
 from pathlib import Path
 import pickle
+
+import mirdata.datasets
+import mirdata.datasets.guitarset
+
 import pandas as pd
 import mir_eval
 import mirdata
@@ -11,6 +15,7 @@ from sklearn.model_selection import train_test_split
 from scipy import stats
 
 from utils.chord_remap import remap_chord_label, CullMode
+from scipy import stats
 
 
 class MirDataProcessor:
@@ -198,6 +203,108 @@ class MirDataProcessor:
             print(f"Root data processed and saved to {root_csv_path}")
             print(f"Chord class data processed and saved to {chord_class_csv_path}")
 
+    def process_wav_data(self, max_tracks=None):
+        """Processes the raw wav data and creates a combined CSV file for training."""
+        combined_csv_path = self.combined_csv_path
+
+        if combined_csv_path.exists():
+            combined_csv_path.unlink()
+
+        track_ids = self.dataset.track_ids
+        print(f"Found {len(track_ids)} tracks in the dataset.")
+
+        num_tracks = 0
+        for track_id in track_ids:
+            if max_tracks is not None:
+                if num_tracks == max_tracks:
+                    break
+            num_tracks += 1
+            track = self.dataset.track(track_id)
+
+            wav, sample_rate = track.audio_mix
+
+            chord_data = mirdata.datasets.guitarset.load_chords(track.jams_path, True)
+
+            chord_intervals = chord_data.intervals
+            chord_labels = chord_data.labels
+
+            timestamps = range(0, wav.shape[0])
+            #converting interval times to the corresponding wav index
+            chord_intervals = chord_intervals * sample_rate
+            # Use mir_eval to get the chord labels at the chroma timestamps
+            # This function maps each timestamp to the corresponding chord label
+            labels_at_times = np.array(
+                mir_eval.util.interpolate_intervals(
+                    chord_intervals, chord_labels, timestamps, fill_value="N"
+                )
+            )
+
+            if self.process_sequential:
+                print("Processing dataset as sequential data")
+                track_id_column = np.full((wav.shape[0], 1), track_id)
+                data_with_labels = np.column_stack((track_id_column, wav, labels_at_times))
+            else:
+                print("Processing dataset as tabular data")
+                data_with_labels = np.column_stack((wav, labels_at_times))
+
+            segment_df = pd.DataFrame(data_with_labels)
+            segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
+
+            print(f"Processed track {track_id} and appended data to combined CSV.")
+
+        print(f"All data processed and saved to {combined_csv_path}")
+
+    def process_wav_data(self, max_tracks=None):
+        """Processes the raw wav data and creates a combined CSV file for training."""
+        combined_csv_path = self.combined_csv_path
+
+        if combined_csv_path.exists():
+            combined_csv_path.unlink()
+
+        track_ids = self.dataset.track_ids
+        print(f"Found {len(track_ids)} tracks in the dataset.")
+
+        num_tracks = 0
+        for track_id in track_ids:
+            if max_tracks is not None:
+                if num_tracks == max_tracks:
+                    break
+            num_tracks += 1
+            track = self.dataset.track(track_id)
+
+            wav, sample_rate = track.audio_mix
+
+            chord_data = mirdata.datasets.guitarset.load_chords(track.jams_path, True)
+
+            chord_intervals = chord_data.intervals
+            chord_labels = chord_data.labels
+
+            timestamps = range(0, wav.shape[0])
+            #converting interval times to the corresponding wav index
+            chord_intervals = chord_intervals * sample_rate
+            # Use mir_eval to get the chord labels at the chroma timestamps
+            # This function maps each timestamp to the corresponding chord label
+            labels_at_times = np.array(
+                mir_eval.util.interpolate_intervals(
+                    chord_intervals, chord_labels, timestamps, fill_value="N"
+                )
+            )
+
+            if self.process_sequential:
+                print("Processing dataset as sequential data")
+                track_id_column = np.full((wav.shape[0], 1), track_id)
+                data_with_labels = np.column_stack((track_id_column, wav, labels_at_times))
+            else:
+                print("Processing dataset as tabular data")
+                data_with_labels = np.column_stack((wav, labels_at_times))
+
+            segment_df = pd.DataFrame(data_with_labels)
+            segment_df.to_csv(combined_csv_path, mode="a", index=False, header=False)
+
+            print(f"Processed track {track_id} and appended data to combined CSV.")
+
+        print(f"All data processed and saved to {combined_csv_path}")
+
     def prepare_model_data(self, dataset, nrows=None):
         """Prepares the data for training by loading the combined CSV and processing it."""
         print(f"Loading the {dataset} CSV file...")
@@ -210,7 +317,7 @@ class MirDataProcessor:
             case 'chord_class':
                 csv_path = self.chord_class_csv_path
 
-        combined_df = pd.read_csv(csv_path, header=None, nrows=nrows)
+        combined_df = pd.read_csv(csv_path, header=None)
         data = combined_df.values
 
         if self.process_sequential:
@@ -243,92 +350,46 @@ class MirDataProcessor:
             pickle.dump(self.label_encoder, f)
 
         if self.process_sequential:
-            X_sequences = []
-            y_sequences = []
+            X_sequences = np.ndarray((0,self.seq_length))
+            y_sequences = np.ndarray((0,))
 
             print("Creating sequences of chromagram data within song boundaries...")
             unique_song_ids = np.unique(song_ids)
 
             for song_id in unique_song_ids:
                 song_indices = np.where(song_ids == song_id)[0]
-                song_features = prepped_features[song_indices, :]
+                song_features = prepped_features[song_indices,0]
                 song_labels = prepped_labels[song_indices]
 
-                if self.overlap_sequence:
-                    num_samples = song_features.shape[0] - self.seq_length + 1
-
-                    if num_samples <= 0:
-                        print(
-                            f"Song {song_id} has insufficient data for seq_length {self.seq_length}, skipping."
-                        )
-                        continue
-                    
-                    for i in range(num_samples):
-                        X_seq = song_features[i : i + self.seq_length, :]
-                        y_seq = song_labels[
-                            i + self.seq_length // 2
-                        ]  # Using the label at the center of the sequence
-                        X_sequences.append(X_seq)
-                        y_sequences.append(y_seq)
-                else:
-                    # Calculate how many full sequences we can get
-                    num_instances = song_features.shape[0]
-                    remainder = num_instances % self.seq_length
-                    pad_amount = 0 if remainder == 0 else (self.seq_length - remainder)
-
-                    if pad_amount > 0:
-                        song_features = np.pad(
-                            song_features, ((0, pad_amount), (0, 0)), mode="constant"
-                        )
-                        song_labels = np.pad(
-                            song_labels,
-                            (0, pad_amount),
-                            mode="constant",
-                            constant_values=song_labels[-1],
-                        )
-
-                    num_instances_padded = song_features.shape[0]
-                    num_samples = num_instances_padded // self.seq_length
-
-                    if num_samples <= 0:
-                        print(
-                            f"Song {song_id} has insufficient data for seq_length {self.seq_length}, skipping."
-                        )
-                        continue
-
-                    input_dim = song_features.shape[1]
-                    track_X_seqs = song_features.reshape(
-                        (num_samples, self.seq_length, input_dim)
+                num_samples = song_features.shape[0] // self.seq_length + 1
+                pad_amount = self.seq_length - (song_features.shape[0] % self.seq_length)
+                song_features = np.pad(song_features, (0,pad_amount))
+                song_labels = np.pad(song_labels, (0,pad_amount))
+                if num_samples <= 0:
+                    print(
+                        f"Song {song_id} has insufficient data for the given sequence length, skipping."
                     )
+                    continue
+                
+                track_X_seqs = song_features.reshape((num_samples, self.seq_length))
+                track_y_seqs = song_labels.reshape((num_samples, self.seq_length))
+                y_modes = stats.mode(track_y_seqs, 1)
+                X_sequences = np.concatenate((X_sequences, track_X_seqs))
+                y_sequences = np.concatenate((y_sequences, y_modes[0]))
 
-                    track_y_seqs = song_labels.reshape((num_samples, self.seq_length))
-                    if self.use_median:
-                        track_y_seqs = track_y_seqs[:, self.seq_length // 2]  # center label
-                        y_sequences.append(track_y_seqs)
-                    # Use mode otherwise
-                    else:
-                        y_modes = stats.mode(track_y_seqs, 1)
-                        y_sequences.append(y_modes[0])
-
-                    X_sequences.append(track_X_seqs)
-
-            if self.overlap_sequence:
-                prepped_features = np.array(X_sequences)
-                prepped_labels = np.array(y_sequences)
-            else:
-                X_sequences = np.concatenate(
-                    X_sequences, axis=0
-                )  # (N, seq_length, input_dim)
-                y_sequences = np.concatenate(y_sequences, axis=0)  # (N,)
-
-                prepped_features = X_sequences
-                prepped_labels = y_sequences
+            prepped_features = np.array(X_sequences)
+            prepped_labels = np.array(y_sequences)
 
         # Split data into training and testing sets
         print("Splitting data into training and testing sets...")
-        X_train, X_test, y_train, y_test = train_test_split(
-            prepped_features, prepped_labels, test_size=0.2, random_state=42
-        )
+        if self.process_sequential:
+            X_train, X_test, y_train, y_test = train_test_split(
+                prepped_features, prepped_labels, test_size=0.05, shuffle=False
+            )
+        else:
+            X_train, X_test, y_train, y_test = train_test_split(
+                prepped_features, prepped_labels, test_size=0.2, random_state=42
+            )
 
         print("Data preparation complete.")
         return X_train, X_test, y_train, y_test
@@ -359,9 +420,7 @@ class MirDataProcessor:
         train_loader = DataLoader(
             train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=0
         )
-        test_loader = DataLoader(
-            test_dataset, batch_size=self.batch_size, num_workers=0
-        )
+        test_loader = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
 
         print("Data loaders are ready for training and testing.")
         return train_loader, test_loader, num_classes
