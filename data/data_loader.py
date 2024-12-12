@@ -421,7 +421,6 @@ class ChordDataProcessor:
             n_chroma=n_chroma,  # 12 pitch classes
         )
         chromagram = chroma_transform(waveform)
-        #print(f"Chromagram shape: {chromagram.shape}")
         return chromagram
     
     def compute_spectrogram_torchaudio(self, waveform: torch.Tensor, n_fft: int = 2048, hop_length: int = 512):
@@ -448,12 +447,12 @@ class ChordDataProcessor:
                     num_samples = duration * sr
                     hop_length = num_samples / seq_length
                     if mode == "chroma":
-                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=hop_length)
-                        out = chromagram.numpy().reshape(seq_length, n_chroma)
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=int(hop_length))
+                        out = chromagram.numpy()[:,:,:-1].reshape(seq_length, n_chroma)
                         features.append(out)
                     if mode == "spectrogram":
-                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=hop_length)
-                        out = spectrogram.numpy().reshape(seq_length, n_fft)
+                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=int(hop_length))
+                        out = spectrogram.numpy()[:,:,:-1].reshape(seq_length, n_fft)
                         features.append(out)
                     if notation == "billboard":
                         labels.append(value["billboard_notation"])
@@ -471,12 +470,12 @@ class ChordDataProcessor:
                     num_samples = duration * sr
                     hop_length = num_samples / seq_length
                     if mode == "chroma":
-                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=hop_length)
-                        out = chromagram.numpy().reshape(seq_length, n_chroma)
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=int(hop_length))
+                        out = chromagram.numpy()[:,:,:-1].reshape(seq_length, n_chroma)
                         features.append(out)
                     if mode == "spectrogram":
-                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=hop_length)
-                        out = spectrogram.numpy().reshape(seq_length, n_fft)
+                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=int(hop_length))
+                        out = spectrogram.numpy()[:,:,:-1].reshape(seq_length, n_fft)
                         features.append(out)
                     if notation == "billboard":
                         labels.append(entry["billboard_notation"])
@@ -485,8 +484,8 @@ class ChordDataProcessor:
                 except KeyError as e:
                     print(f"Skipping entry {entry['filename']} due to missing key: {e}")
 
-        self.features = np.array(features).squeeze()
-        self.labels = np.array(labels).squeeze()
+        self.features = np.array(features)
+        self.labels = np.array(labels)
 
         print(f"Loaded features shape: {self.features.shape}")
         print(f"Loaded labels shape: {self.labels.shape}")
