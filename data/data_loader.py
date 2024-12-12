@@ -9,13 +9,21 @@ import mir_eval
 import mirdata
 import torch
 from torch.utils.data import TensorDataset, DataLoader
+import torchaudio
+import torchaudio.transforms as T
+import torchaudio.prototype.transforms as PT
+import librosa
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 from scipy import stats
-
+from pydub import AudioSegment
 from utils.chord_remap import remap_chord_label, CullMode
+
+import json
+
 from scipy import stats
+
 
 
 class MirDataProcessor:
@@ -401,7 +409,6 @@ class MirDataProcessor:
 
         # Determine the number of classes
         num_classes = len(self.label_encoder.classes_)
-        print(f"Number of classes determined: {num_classes}")
 
         # Convert to PyTorch tensors
         X_train_tensor = torch.tensor(X_train, dtype=torch.float32, device=device)
@@ -438,3 +445,292 @@ class MirDataProcessor:
             for _, row in valid_data.iterrows()
         }
         return song_metadata
+    
+
+class ChordDataProcessor:
+    def __init__(self, device="cpu"):
+        self.device = device
+        
+        self.scaler = MinMaxScaler()
+        self.label_encoder = LabelEncoder()
+
+        self.features = None
+        self.labels = None
+    
+    def load_audio(self, audio_path: str):
+        """Load an audio file and convert to mono if necessary."""
+        waveform, sr = torchaudio.load(audio_path)
+        if waveform.shape[0] > 1:  # If stereo, average channels to make mono
+            waveform = waveform.mean(dim=0)
+        return waveform, sr
+
+    def compute_chromagram_torchaudio(self, waveform: torch.Tensor, sr: int, n_chroma:int=12, n_fft: int = 2048, hop_length: int = 512):
+        """
+        Compute a chromagram using torchaudio.prototype.transforms.ChromaSpectrogram.
+        
+        Args:
+            waveform: The input audio waveform.
+            sr: Sampling rate of the audio.
+            n_fft: FFT size.
+            hop_length: Hop length for STFT.
+            
+        Returns:
+            chromagram: Chromagram tensor of shape (12, time).
+        """
+        chroma_transform = PT.ChromaSpectrogram(
+            sample_rate=sr,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_chroma=n_chroma,  # 12 pitch classes
+        )
+        chromagram = chroma_transform(waveform)
+        return chromagram
+    
+    def compute_chromagram_librosa(self, waveform: torch.Tensor, sr: int, n_chroma: int = 12, n_fft: int = 2048, hop_length: int = 512):
+        """
+        Compute a chromagram using librosa.
+        
+        Args:
+            waveform: The input audio waveform as a PyTorch tensor.
+            sr: Sampling rate of the audio.
+            n_chroma: Number of pitch classes (default: 12).
+            n_fft: FFT size.
+            hop_length: Hop length for STFT.
+            
+        Returns:
+            chromagram: Chromagram numpy array of shape (12, time).
+        """
+        # Convert PyTorch tensor to numpy array if necessary
+        waveform_np = waveform.cpu().numpy() if isinstance(waveform, torch.Tensor) else waveform
+        
+        # Compute the power spectrogram
+        S = np.abs(librosa.stft(waveform_np, n_fft=n_fft, hop_length=hop_length))**2
+        
+        # Compute the chromagram
+        chromagram = librosa.feature.chroma_stft(S=S, sr=sr, n_chroma=n_chroma)
+        
+        return chromagram
+    
+    def compute_spectrogram_torchaudio(self, waveform: torch.Tensor, n_fft: int = 2048, hop_length: int = 512):
+        """Compute a spectrogram using torchaudio."""
+        spectrogram = T.Spectrogram(n_fft=n_fft, hop_length=hop_length, power=2.0)(waveform)
+        return spectrogram
+
+    def load_chord_data(self, chord_json_path, seq_length=8, n_chroma=12, n_fft=2048, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd())):
+        #mode picks if the audio data is converted to "chroma" (chromagram) or "spectrogram"
+        #json controls the json format because I am dumb and there are 2 types (use "keyed" for chordgen and (i think) fxgen, anything else will set it to texture bias format)
+        #audio_path parent for the audio file dir, since the jsons have different formatting this will be different for keyed/entry
+        """Loads chord data from the JSON file and extracts features/labels."""
+        with open(Path(chord_json_path), "r") as f:
+            chord_data = json.load(f)
+
+        features = []
+        labels = []
+        if jsontype == "keyed":
+            for key, value in chord_data.items():
+                try:
+                    audio_file = audio_path + "/"  + value["filename"]
+                    duration = value['duration(s)']
+                    waveform, sr = self.load_audio(audio_file)
+                    num_samples = duration * sr
+                    hop_length = num_samples / seq_length
+                    if mode == "chroma":
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=int(hop_length))
+                        out = chromagram.numpy()[:,:,:-1].reshape(seq_length, n_chroma)
+                        features.append(out)
+                    if mode == "spectrogram":
+                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=int(hop_length))
+                        out = spectrogram.numpy()[:,:,:-1].reshape(seq_length, n_fft)
+                        features.append(out)
+                    if notation == "billboard":
+                        labels.append(value["billboard_notation"])
+                    else:
+                        labels.append(value["chord_class"])
+                except KeyError as e:
+                    print(f"Skipping entry {key} due to missing key: {e}")
+        else:
+            for entry in chord_data:
+                try:
+                    fx_summary = "_".join(f"{key}_{value}" for key, value in entry['applied_fx'].items())
+                    audio_file = audio_path + "/" + entry["processed_path"] + fx_summary + ".mp3"
+                    waveform, sr = self.load_audio(audio_file)
+                    duration = entry['duration(s)']
+                    num_samples = duration * sr
+                    hop_length = num_samples / seq_length
+                    if mode == "chroma":
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=int(hop_length))
+                        out = chromagram.numpy()[:,:,:-1].reshape(seq_length, n_chroma)
+                        features.append(out)
+                    if mode == "spectrogram":
+                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=int(hop_length))
+                        out = spectrogram.numpy()[:,:,:-1].reshape(seq_length, n_fft)
+                        features.append(out)
+                    if notation == "billboard":
+                        labels.append(entry["billboard_notation"])
+                    else:
+                        labels.append(entry["chord_class"])
+                except KeyError as e:
+                    print(f"Skipping entry {entry['filename']} due to missing key: {e}")
+
+        self.features = np.array(features)
+        self.labels = np.array(labels)
+
+        print(f"Loaded features shape: {self.features.shape}")
+        print(f"Loaded labels shape: {self.labels.shape}")
+
+    def convert_mp3_to_wav(self, mp3_file: Path, wav_file: Path):
+        """
+        Convert an MP3 file to WAV format.
+        
+        Args:
+            mp3_file: Path to the MP3 file.
+            wav_file: Path where the WAV file should be saved.
+        """
+        if not wav_file.exists():  # Only convert if WAV file doesn't already exist
+            audio = AudioSegment.from_file(mp3_file, format="mp3")
+            audio.export(wav_file, format="wav")
+
+
+    def load_chord_data_librosa(self, chord_json_path, seq_length=8, n_chroma=12, n_fft=2048, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd())):
+        """
+        Loads chord data from the JSON file and extracts features/labels using librosa.
+        
+        Args:
+            chord_json_path: Path to the chord JSON file.
+            seq_length: Number of sequences for splitting features.
+            n_chroma: Number of chroma bins (default: 12).
+            n_fft: FFT size (default: 2048).
+            notation: Chord notation format ('billboard' or 'chord_class').
+            mode: Feature mode ('chroma' or 'spectrogram').
+            jsontype: JSON format ('keyed' or other).
+            audio_path: Directory where audio files are located.
+        """
+        audio_dir = Path(audio_path)
+        wav_dir = audio_dir / "wavs"  # Directory to store converted WAV files
+        wav_dir.mkdir(exist_ok=True)  # Ensure the WAV directory exists
+
+        features = []
+        labels = []
+
+        with open(chord_json_path, "r") as f:
+            chord_data = json.load(f)
+
+        if jsontype == "keyed":
+            for key, value in chord_data.items():
+                try:
+                    original_file = audio_dir / value["filename"]  # Original file (MP3 or WAV)
+                    if original_file.suffix == ".mp3":
+                        wav_file = wav_dir / original_file.with_suffix(".wav").name
+                        # Convert MP3 to WAV if necessary
+                        self.convert_mp3_to_wav(original_file, wav_file)
+                    else:
+                        wav_file = original_file  # Use WAV file directly
+
+                    duration = value['duration(s)']
+                    y, sr = librosa.load(wav_file, sr=441000)  # Load with librosa
+                    num_samples = int(duration * sr)
+                    hop_length = num_samples // seq_length
+
+                    if mode == "chroma":
+                        S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))**2
+                        chromagram = librosa.feature.chroma_stft(S=S, sr=sr, n_chroma=n_chroma)
+                        out = chromagram[:, :seq_length].reshape(seq_length, n_chroma)
+                        features.append(out)
+
+                    elif mode == "spectrogram":
+                        spectrogram = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))**2
+                        n_channels = int(n_fft/2)
+                        out = spectrogram[:n_channels:, :seq_length].reshape(seq_length, n_channels)
+                        features.append(out)
+
+                    if notation == "billboard":
+                        labels.append(value["billboard_notation"])
+                    else:
+                        labels.append(value["chord_class"])
+                except KeyError as e:
+                    print(f"Skipping entry {key} due to missing key: {e}")
+                except FileNotFoundError:
+                    print(f"Audio file not found: {audio_file}")
+        else:
+            for entry in chord_data:
+                try:
+                    fx_summary = "_".join(f"{key}_{value}" for key, value in entry['applied_fx'].items())
+                    audio_file = f"{audio_path}/{entry['processed_path']}{fx_summary}.wav"  # Use WAV files
+                    y, sr = librosa.load(audio_file, sr=None)  # Load with librosa
+                    duration = entry['duration(s)']
+                    num_samples = int(duration * sr)
+                    hop_length = num_samples // seq_length
+
+                    if mode == "chroma":
+                        S = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))**2
+                        chromagram = librosa.feature.chroma_stft(S=S, sr=sr, n_chroma=n_chroma)
+                        out = chromagram[:, :seq_length * chromagram.shape[1] // seq_length].reshape(seq_length, n_chroma)
+                        features.append(out)
+
+                    elif mode == "spectrogram":
+                        spectrogram = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))**2
+                        out = spectrogram[:, :seq_length * spectrogram.shape[1] // seq_length].reshape(seq_length, n_fft)
+                        features.append(out)
+
+                    if notation == "billboard":
+                        labels.append(entry["billboard_notation"])
+                    else:
+                        labels.append(entry["chord_class"])
+                except KeyError as e:
+                    print(f"Skipping entry {entry['filename']} due to missing key: {e}")
+                except FileNotFoundError:
+                    print(f"Audio file not found: {audio_file}")
+
+        self.features = np.array(features)
+        self.labels = np.array(labels)
+
+        print(f"Loaded features shape: {self.features.shape}")
+        print(f"Loaded labels shape: {self.labels.shape}")
+
+
+    def preprocess_data(self):
+        """Scales features and encodes labels."""
+        #self.features = self.scaler.fit_transform(self.features)
+        #scalar is probably unnecessary for spectro/chroma data
+        self.labels = self.label_encoder.fit_transform(self.labels)
+
+    def synchronize_features_and_labels(self):
+        """Ensures features and labels have the same number of samples."""
+        min_length = min(len(self.features), len(self.labels))
+        if len(self.features) != len(self.labels):
+            print(
+                f"Synchronizing features ({len(self.features)}) and labels ({len(self.labels)}) to length {min_length}"
+            )
+        self.features = self.features[:min_length]
+        self.labels = self.labels[:min_length]
+
+    def build_data_loaders(self, batch_size=64, test_size=0.2, random_state=42):
+        """Splits data into training/testing sets and creates DataLoaders."""
+        self.synchronize_features_and_labels()  # Ensure consistency
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            self.features, self.labels, test_size=test_size, stratify=self.labels, random_state=random_state)
+        num_classes = len(self.label_encoder.classes_)
+
+        X_train_tensor = torch.tensor(X_train, dtype=torch.float32, device=self.device)
+        y_train_tensor = torch.tensor(y_train, dtype=torch.long, device=self.device)
+        X_test_tensor = torch.tensor(X_test, dtype=torch.float32, device=self.device)
+        y_test_tensor = torch.tensor(y_test, dtype=torch.long, device=self.device)
+
+        train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+        test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size)
+
+        return train_loader, test_loader, num_classes
+
+    def process_all_and_build_loaders(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd()), encoding="wav", batch_size=64, seq_length=8, n_chroma=12, n_fft=2048, test_size=0.2, random_state=42):
+        """Combines all steps into one pipeline."""
+        if encoding == "mp3":
+            self.load_chord_data(chord_json_path, seq_length, n_chroma, n_fft, notation, mode, jsontype, audio_path)
+        if encoding == "wav":
+            self.load_chord_data_librosa(chord_json_path, seq_length, n_chroma, n_fft, notation, mode, jsontype, audio_path)
+        self.preprocess_data()
+        self.synchronize_features_and_labels()
+        return self.build_data_loaders(batch_size=batch_size, test_size=test_size, random_state=random_state)
