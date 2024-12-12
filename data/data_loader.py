@@ -553,7 +553,8 @@ class ChordDataProcessor:
 
                     elif mode == "spectrogram":
                         spectrogram = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop_length))**2
-                        out = spectrogram[:, :seq_length].reshape(seq_length, n_fft)
+                        n_channels = int(n_fft/2)
+                        out = spectrogram[:n_channels:, :seq_length].reshape(seq_length, n_channels)
                         features.append(out)
 
                     if notation == "billboard":
