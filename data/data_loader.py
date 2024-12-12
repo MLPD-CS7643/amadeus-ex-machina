@@ -385,8 +385,7 @@ class MirDataProcessor:
     
 
 class ChordDataProcessor:
-    def __init__(self, device="cpu", process_sequential=False):
-        self.process_sequential = process_sequential
+    def __init__(self, device="cpu"):
         self.device = device
         
         self.scaler = MinMaxScaler()
@@ -402,7 +401,7 @@ class ChordDataProcessor:
             waveform = waveform.mean(dim=0)
         return waveform, sr
 
-    def compute_chromagram_torchaudio(self, waveform: torch.Tensor, sr: int, n_fft: int = 2048, hop_length: int = 512):
+    def compute_chromagram_torchaudio(self, waveform: torch.Tensor, sr: int, n_chroma:int=12, n_fft: int = 2048, hop_length: int = 512):
         """
         Compute a chromagram using torchaudio.prototype.transforms.ChromaSpectrogram.
         
@@ -419,17 +418,17 @@ class ChordDataProcessor:
             sample_rate=sr,
             n_fft=n_fft,
             hop_length=hop_length,
-            n_chroma=12,  # 12 pitch classes
+            n_chroma=n_chroma,  # 12 pitch classes
         )
         chromagram = chroma_transform(waveform)
         return chromagram
     
-    def compute_spectrogram_torchaudio(waveform: torch.Tensor, n_fft: int = 2048, hop_length: int = 512):
+    def compute_spectrogram_torchaudio(self, waveform: torch.Tensor, n_fft: int = 2048, hop_length: int = 512):
         """Compute a spectrogram using torchaudio."""
         spectrogram = T.Spectrogram(n_fft=n_fft, hop_length=hop_length, power=2.0)(waveform)
         return spectrogram
 
-    def load_chord_data(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd())):
+    def load_chord_data(self, chord_json_path, seq_length=8, n_chroma=12, n_fft=2048, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd())):
         #mode picks if the audio data is converted to "chroma" (chromagram) or "spectrogram"
         #json controls the json format because I am dumb and there are 2 types (use "keyed" for chordgen and (i think) fxgen, anything else will set it to texture bias format)
         #audio_path parent for the audio file dir, since the jsons have different formatting this will be different for keyed/entry
@@ -443,13 +442,18 @@ class ChordDataProcessor:
             for key, value in chord_data.items():
                 try:
                     audio_file = audio_path + "/"  + value["filename"]
+                    duration = value['duration(s)']
                     waveform, sr = self.load_audio(audio_file)
+                    num_samples = duration * sr
+                    hop_length = num_samples / seq_length
                     if mode == "chroma":
-                        chromagram = self.compute_chromagram_torchaudio(waveform, sr)
-                        features.append(chromagram.numpy())
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=int(hop_length))
+                        out = chromagram.numpy()[:,:,:-1].reshape(seq_length, n_chroma)
+                        features.append(out)
                     if mode == "spectrogram":
-                        spectrogram = PT.Spectrogram()(waveform)
-                        features.append(spectrogram.numpy())
+                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=int(hop_length))
+                        out = spectrogram.numpy()[:,:,:-1].reshape(seq_length, n_fft)
+                        features.append(out)
                     if notation == "billboard":
                         labels.append(value["billboard_notation"])
                     else:
@@ -462,12 +466,17 @@ class ChordDataProcessor:
                     fx_summary = "_".join(f"{key}_{value}" for key, value in entry['applied_fx'].items())
                     audio_file = audio_path + "/" + entry["processed_path"] + fx_summary + ".mp3"
                     waveform, sr = self.load_audio(audio_file)
+                    duration = entry['duration(s)']
+                    num_samples = duration * sr
+                    hop_length = num_samples / seq_length
                     if mode == "chroma":
-                        chromagram = self.compute_chromagram_torchaudio(waveform, sr)
-                        features.append(chromagram.numpy())
+                        chromagram = self.compute_chromagram_torchaudio(waveform, sr, 12, n_fft=n_fft, hop_length=int(hop_length))
+                        out = chromagram.numpy()[:,:,:-1].reshape(seq_length, n_chroma)
+                        features.append(out)
                     if mode == "spectrogram":
-                        spectrogram = PT.Spectrogram()(waveform)
-                        features.append(spectrogram.numpy())
+                        spectrogram = self.compute_spectrogram_torchaudio(waveform, n_fft=n_fft, hop_length=int(hop_length))
+                        out = spectrogram.numpy()[:,:,:-1].reshape(seq_length, n_fft)
+                        features.append(out)
                     if notation == "billboard":
                         labels.append(entry["billboard_notation"])
                     else:
@@ -487,27 +496,6 @@ class ChordDataProcessor:
         #scalar is probably unnecessary for spectro/chroma data
         self.labels = self.label_encoder.fit_transform(self.labels)
 
-    def prepare_data(self, seq_length=16):
-        """Prepares features and labels for sequential or tabular processing."""
-        if self.process_sequential:
-            X_sequences, y_sequences = [], []
-            num_samples = len(self.features) - seq_length + 1
-
-            if num_samples <= 0:
-                raise ValueError("Not enough data for the given sequence length.")
-
-            for i in range(num_samples):
-                X_seq = self.features[i : i + seq_length]
-                y_seq = self.labels[i + seq_length // 2]
-                X_sequences.append(X_seq)
-                y_sequences.append(y_seq)
-
-            self.features = np.array(X_sequences)
-            self.labels = np.array(y_sequences)
-
-        print(f"Prepared features shape: {self.features.shape}")
-        print(f"Prepared labels shape: {self.labels.shape}")
-
     def synchronize_features_and_labels(self):
         """Ensures features and labels have the same number of samples."""
         min_length = min(len(self.features), len(self.labels))
@@ -518,7 +506,7 @@ class ChordDataProcessor:
         self.features = self.features[:min_length]
         self.labels = self.labels[:min_length]
 
-    def build_data_loaders(self, batch_size=64, seq_length=16, test_size=0.2, random_state=42):
+    def build_data_loaders(self, batch_size=64, test_size=0.2, random_state=42):
         """Splits data into training/testing sets and creates DataLoaders."""
         self.synchronize_features_and_labels()  # Ensure consistency
 
@@ -539,10 +527,9 @@ class ChordDataProcessor:
 
         return train_loader, test_loader, num_classes
 
-    def process_all_and_build_loaders(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd()), batch_size=64, seq_length=16, test_size=0.2, random_state=42):
+    def process_all_and_build_loaders(self, chord_json_path, notation="billboard", mode="chroma", jsontype="keyed", audio_path=str(Path.cwd()), batch_size=64, seq_length=8, n_chroma=12, n_fft=2048, test_size=0.2, random_state=42):
         """Combines all steps into one pipeline."""
-        self.load_chord_data(chord_json_path, notation, mode, jsontype, audio_path)
+        self.load_chord_data(chord_json_path, seq_length, n_chroma, n_fft, notation, mode, jsontype, audio_path)
         self.preprocess_data()
-        self.prepare_data(seq_length=seq_length)
         self.synchronize_features_and_labels()
-        return self.build_data_loaders(batch_size=batch_size, seq_length=seq_length, test_size=test_size, random_state=random_state)
+        return self.build_data_loaders(batch_size=batch_size, test_size=test_size, random_state=random_state)
