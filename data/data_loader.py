@@ -305,7 +305,7 @@ class MirDataProcessor:
 
         print(f"All data processed and saved to {combined_csv_path}")
 
-    def prepare_model_data(self, nrows=None):
+    def prepare_model_data(self, dataset, nrows=None):
         """Prepares the data for training by loading the combined CSV and processing it."""
         print(f"Loading the {dataset} CSV file...")
 
@@ -317,7 +317,7 @@ class MirDataProcessor:
             case 'chord_class':
                 csv_path = self.chord_class_csv_path
 
-        combined_df = pd.read_csv(csv_path, header=None, nrows=nrows)
+        combined_df = pd.read_csv(csv_path, header=None)
         data = combined_df.values
 
         if self.process_sequential:

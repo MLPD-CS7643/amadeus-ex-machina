@@ -119,9 +119,6 @@ class Solver:
     ):
         train_loader = self.train_dataloader
         valid_loader = self.valid_dataloader
-        if kFolds is not None:
-            kf = KFold(kFolds)
-            train_loader = kf.split(train_loader)
         no_improve = 0
         best_loss = float("inf")
         best_val_accuracy = 0
