@@ -59,7 +59,6 @@ class FourierS2S(nn.Module):
             current = tokenized[i,:]
             fouriers = self.strideFourier(current.unsqueeze(0)).real
             drop = self.drop(fouriers).squeeze(0)
-            #reshaped_hidden = (hidden[0].transpose(0,1), hidden[1].transpose(0,1))
             dec_output, hidden = self.decoder(drop, hidden)
             output = self.out_linear(dec_output[-1,:])
             outputs[i,:] = output

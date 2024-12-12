@@ -13,6 +13,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 from utils.chord_remap import remap_chord_label, CullMode
+from scipy import stats
 
 
 class MirDataProcessor:
@@ -244,9 +245,10 @@ class MirDataProcessor:
                     continue
                 
                 track_X_seqs = song_features.reshape((num_samples, self.seq_length))
-                track_y_seqs = song_labels.reshape((num_samples, self.seq_length))[:,self.seq_length//2]
+                track_y_seqs = song_labels.reshape((num_samples, self.seq_length))
+                y_modes = stats.mode(track_y_seqs, 1)
                 X_sequences = np.concatenate((X_sequences, track_X_seqs))
-                y_sequences = np.concatenate((y_sequences, track_y_seqs))
+                y_sequences = np.concatenate((y_sequences, y_modes[0]))
 
             prepped_features = np.array(X_sequences)
             prepped_labels = np.array(y_sequences)
