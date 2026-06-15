@@ -121,7 +121,9 @@ class InferenceEngine:
 
     # -- pipeline stages -------------------------------------------------
 
-    def extract_chromagram(self, audio_path: str):
+    def extract_chromagram(
+        self, audio_path: str
+    ) -> tuple[np.ndarray, np.ndarray, float]:
         """Returns (features[n,24], timestamps[n], duration)."""
         return extract_chroma24(
             audio_path, hop_length=self.hop_length, smooth_window=self.feat_smooth

@@ -22,7 +22,7 @@ class TorchFXGenerator:
         """
         # Load metadata and validate against audio files
         self.metadata = self._load_data(audio_dir, metadata_path)
-        self.fx_metadata = {}
+        self.fx_metadata: dict = {}
 
         # Initialize effects and their presets
         self.fx_presets = {
@@ -139,8 +139,8 @@ class TorchFXGenerator:
                 d = Delay.Delay(sr=sr)
                 processed_np = d.delay(audio_np, **fx_params[fx])
             elif fx == "distortion":
-                d = Distortion.Distortion(sr=sr)
-                processed_np = d.distort(audio_np, **fx_params[fx])
+                dist = Distortion.Distortion(sr=sr)
+                processed_np = dist.distort(audio_np, **fx_params[fx])
             elif fx == "chorus":
                 c = Chorus.Chorus(sr=sr)
                 processed_np = c.process(audio_np, **fx_params[fx])
@@ -232,7 +232,7 @@ class TorchFXGenerator:
             if systematic:
                 combinations = self._generate_all_combinations()
             else:
-                used_combinations = set()
+                used_combinations: set = set()
                 combinations = (
                     self._get_unique_random_combination(used_combinations)
                     for _ in range(permutations_per_sample)
@@ -312,7 +312,7 @@ class TorchFXGenerator:
             fx_params = {}
             fx_preset_names = {}
 
-            for fx, (preset_name, params) in zip(effect_names, combo):
+            for fx, (preset_name, params) in zip(effect_names, combo, strict=False):
                 fx_preset_names[fx] = preset_name
                 if preset_name != "none":
                     fx_chain.append(fx)

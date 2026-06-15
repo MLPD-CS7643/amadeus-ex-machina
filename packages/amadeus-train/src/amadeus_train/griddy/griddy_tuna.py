@@ -54,7 +54,7 @@ def hit_griddy(
     if not resume:
         try:
             optuna.delete_study(study_name=study_name, storage=storage_path)
-        except:
+        except Exception:
             pass
 
     study = optuna.create_study(
@@ -115,7 +115,7 @@ def __instantiate_class_with_trial_params(
     trial,
     class_group,
     param_set,
-    pass_through_kwargs: dict = None,
+    pass_through_kwargs: dict | None = None,
     enforce_single_class=False,
 ):
     """
@@ -192,12 +192,12 @@ def __create_optuna_suggest(trial, name, values, method):
 def __get_direction(param_set):
     try:
         solver_dict = param_set["solver"]
-    except:
+    except Exception:
         ValueError('param_set must include solver class with "direction" entry.')
     for _, v in solver_dict.items():
         try:
             return v["direction"]
-        except:
+        except Exception:
             ValueError('param_set must include solver class with "direction" entry.')
 
 

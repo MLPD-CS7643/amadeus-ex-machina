@@ -10,12 +10,14 @@ Run:  uvicorn amadeus_api.main:app --port 8000
 """
 
 import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from amadeus_api.config import Settings
 from amadeus_api.config import settings as default_settings
 from amadeus_api.errors import error_body, register_exception_handlers
 from amadeus_api.files import FileHandler
@@ -34,9 +36,9 @@ logger = logging.getLogger(__name__)
 _HEALTH_PATH = "/api/health"
 
 
-def create_app(config=default_settings) -> FastAPI:
+def create_app(config: Settings = default_settings) -> FastAPI:
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
         # Drain the worker pool on shutdown.
         worker = getattr(app.state, "worker", None)
@@ -57,7 +59,9 @@ def create_app(config=default_settings) -> FastAPI:
     )
 
     @app.middleware("http")
-    async def _rate_limit(request: Request, call_next):
+    async def _rate_limit(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         limiter = getattr(request.app.state, "rate_limiter", None)
         if (
             limiter is not None

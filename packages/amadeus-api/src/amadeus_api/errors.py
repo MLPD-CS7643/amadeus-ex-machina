@@ -49,22 +49,28 @@ def error_response(
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(FileValidationError)
-    async def _handle_validation(_request: Request, exc: FileValidationError):
+    async def _handle_validation(
+        _request: Request, exc: FileValidationError
+    ) -> JSONResponse:
         http_status = 413 if exc.error_code == OVERSIZE_CODE else 400
         return error_response(exc.error_code, exc.message, http_status)
 
     @app.exception_handler(ProcessingError)
-    async def _handle_processing(_request: Request, exc: ProcessingError):
+    async def _handle_processing(
+        _request: Request, exc: ProcessingError
+    ) -> JSONResponse:
         return error_response("PROCESSING_ERROR", exc.message, 500)
 
     @app.exception_handler(StarletteHTTPException)
-    async def _handle_http(_request: Request, exc: StarletteHTTPException):
+    async def _handle_http(
+        _request: Request, exc: StarletteHTTPException
+    ) -> JSONResponse:
         # Preserve FastAPI's status codes but wrap the body in our error shape.
         if exc.status_code == 404:
             return error_response("NOT_FOUND", "Resource not found.", 404)
         return error_response("HTTP_ERROR", str(exc.detail), exc.status_code)
 
     @app.exception_handler(Exception)
-    async def _handle_unexpected(_request: Request, exc: Exception):
+    async def _handle_unexpected(_request: Request, exc: Exception) -> JSONResponse:
         logger.exception("Unhandled error")
         return error_response("INTERNAL_ERROR", str(exc), 500)

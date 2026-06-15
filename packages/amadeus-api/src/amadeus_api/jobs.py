@@ -102,7 +102,7 @@ class JobManager:
             return self._read(job_id)
 
     def update_job_status(
-        self, job_id: str, status: str | None = None, **fields
+        self, job_id: str, status: str | None = None, **fields: object
     ) -> dict:
         """
         Update a job's status and/or other fields.

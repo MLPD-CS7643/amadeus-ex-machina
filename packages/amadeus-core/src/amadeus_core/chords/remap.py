@@ -29,7 +29,7 @@ REMAP = {
 }
 
 
-def remap_chord_label(billboard_chord: str, cull_mode: CullMode):
+def remap_chord_label(billboard_chord: str, cull_mode: CullMode) -> tuple[str, str]:
     if billboard_chord == "X" or billboard_chord == "N":
         return ("N", "N")
     root, chord_class = billboard_chord.split(":", 1)

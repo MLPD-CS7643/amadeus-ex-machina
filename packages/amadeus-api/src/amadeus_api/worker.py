@@ -11,6 +11,7 @@ import logging
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
+from amadeus_api.files import FileHandler
 from amadeus_api.jobs import COMPLETE, FAILED, PROCESSING, JobManager
 from amadeus_core.errors import ProcessingError, sanitize_message
 from amadeus_core.inference import InferenceEngine
@@ -24,7 +25,7 @@ class JobWorker:
         job_manager: JobManager,
         engine: InferenceEngine,
         results_dir: Path,
-        file_handler=None,
+        file_handler: FileHandler | None = None,
         max_concurrent: int = 5,
     ):
         self.job_manager = job_manager

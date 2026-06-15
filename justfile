@@ -23,13 +23,13 @@ lint:
 lint-fix:
     uv run ruff check --fix packages
 
-# Static type-check the product path (core + api).
+# Static type-check all packages (core + api held to a stricter bar; see pyproject).
 typecheck:
-    uv run mypy packages/amadeus-core/src packages/amadeus-api/src
+    uv run mypy packages/amadeus-core/src packages/amadeus-api/src packages/amadeus-train/src
 
-# Run the full Python test suite (core + api). Separate invocations avoid the
-# duplicate-`tests`-package collision between the two packages.
-test: test-core test-api
+# Run the full Python test suite. Separate invocations avoid the duplicate-`tests`-
+# package collision between packages.
+test: test-core test-api test-train
 
 test-core:
     uv run pytest packages/amadeus-core
@@ -65,6 +65,14 @@ fe-build:
 
 fe-test:
     cd frontend && npm run test
+
+# Install the git pre-commit hooks (run `just sync` first).
+hooks:
+    uv run pre-commit install
+
+# Run the pre-commit hooks against all tracked files.
+pre-commit:
+    uv run pre-commit run --all-files
 
 # Aggregate gates.
 check: lint typecheck test

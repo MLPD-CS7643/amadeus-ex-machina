@@ -380,7 +380,7 @@ def get_mp3_duration(mp3_file_path):
                 "copy",
                 fixed_file_path,
             ]
-            subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(command, capture_output=True)
 
             # Replace the original file with the fixed file
             if os.path.exists(fixed_file_path):

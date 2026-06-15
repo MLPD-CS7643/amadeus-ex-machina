@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, File, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from amadeus_api.errors import error_response
 from amadeus_api.jobs import COMPLETE
@@ -48,14 +48,14 @@ def _parse_lab(path: Path) -> list[dict]:
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health(request: Request):
+async def health(request: Request) -> HealthResponse:
     return HealthResponse(
         status="ok", engineLoaded=bool(request.app.state.engine.is_loaded)
     )
 
 
 @router.post("/upload", response_model=JobCreated)
-async def upload(request: Request, file: UploadFile | None = File(None)):
+async def upload(request: Request, file: UploadFile | None = File(None)) -> JobCreated:
     from amadeus_api.errors import FileValidationError
 
     if file is None or not file.filename:
@@ -76,7 +76,7 @@ async def upload(request: Request, file: UploadFile | None = File(None)):
 
 
 @router.get("/status/{job_id}", response_model=JobStatus)
-async def status(request: Request, job_id: str):
+async def status(request: Request, job_id: str) -> JobStatus | JSONResponse:
     job = request.app.state.job_manager.get_job_status(job_id)
     if job is None:
         return error_response("JOB_NOT_FOUND", "Job not found.", 404)
@@ -97,7 +97,7 @@ async def status(request: Request, job_id: str):
 
 
 @router.get("/results/{job_id}", response_model=ResultsResponse)
-async def results(request: Request, job_id: str):
+async def results(request: Request, job_id: str) -> ResultsResponse | JSONResponse:
     job = request.app.state.job_manager.get_job_status(job_id)
     if job is None or job.get("status") != COMPLETE:
         return error_response(
@@ -117,8 +117,8 @@ async def results(request: Request, job_id: str):
     )
 
 
-@router.get("/download/{job_id}")
-async def download(request: Request, job_id: str):
+@router.get("/download/{job_id}", response_model=None)
+async def download(request: Request, job_id: str) -> FileResponse | JSONResponse:
     job = request.app.state.job_manager.get_job_status(job_id)
     if job is None or job.get("status") != COMPLETE:
         return error_response(

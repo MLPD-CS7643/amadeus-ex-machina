@@ -33,8 +33,6 @@ class Dynamics:
         audio = np.array(audio, dtype=np.float32)
 
         # Convert parameters from dB
-        threshold = 10 ** (threshold_db / 20)
-        knee_width = 10 ** (knee_db / 20)
         makeup_gain = 10 ** (makeup_gain_db / 20)
 
         # Calculate time constants

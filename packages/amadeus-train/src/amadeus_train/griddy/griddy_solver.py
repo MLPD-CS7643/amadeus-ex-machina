@@ -148,7 +148,7 @@ class GriddySolver:
 
             # update confusion matrix
             _, preds = torch.max(out, 1)
-            for t, p in zip(target.view(-1), preds.view(-1)):
+            for t, p in zip(target.view(-1), preds.view(-1), strict=False):
                 cm[t.long(), p.long()] += 1
 
             losses.update(loss.item(), out.shape[0])

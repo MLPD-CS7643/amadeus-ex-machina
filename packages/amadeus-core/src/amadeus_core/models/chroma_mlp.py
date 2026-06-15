@@ -15,7 +15,7 @@ class ChromaMLP(nn.Module):
         self,
         input_features: int = 24,
         num_classes: int = 2,
-        hidden_sizes=(256, 256),
+        hidden_sizes: tuple[int, ...] = (256, 256),
         dropout: float = 0.3,
     ):
         super().__init__()

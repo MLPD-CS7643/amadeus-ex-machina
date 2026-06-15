@@ -31,7 +31,6 @@ class Flanger:
             lfo = np.sin(2 * np.pi * rate * t + phase)
         elif shape == "triangle":
             # Create triangle wave
-            period = self.sr / rate
             ramp = (2 * np.mod(t * rate + phase / (2 * np.pi), 1)) - 1
             lfo = 2 * np.abs(ramp) - 1
         else:

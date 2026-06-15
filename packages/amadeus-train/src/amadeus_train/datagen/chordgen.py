@@ -202,9 +202,7 @@ def generate_all_chords(
                         )
                     )
 
-            with tqdm_joblib(
-                tqdm(desc="Processing chords", total=len(tasks))
-            ) as progress_bar:
+            with tqdm_joblib(tqdm(desc="Processing chords", total=len(tasks))):
                 results = Parallel(n_jobs=n_jobs)(
                     delayed(__process_chord_task)(*t) for t in tasks
                 )

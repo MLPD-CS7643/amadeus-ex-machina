@@ -33,6 +33,7 @@ class Solver:
         warmup_epochs=0,
         dtype="float16",
         optuna_prune=False,
+        checkpoint_dir=None,
         **kwargs,
     ):
         self.device = device
@@ -63,12 +64,17 @@ class Solver:
         #     self.model = self.model.bfloat16()
 
         self.base_lr = optimizer.param_groups[0]["lr"]
-        self.train_accuracy_history = []
-        self.valid_accuracy_history = []
-        self.train_loss_history = []
-        self.valid_loss_history = []
+        self.train_accuracy_history: list[float] = []
+        self.valid_accuracy_history: list[float] = []
+        self.train_loss_history: list[float] = []
+        self.valid_loss_history: list[float] = []
 
         self.best_model = None
+        # Where best-model checkpoints are written (created on first save). Defaults to
+        # a ``checkpoints/`` dir under the current working directory.
+        self.checkpoint_dir = (
+            Path(checkpoint_dir) if checkpoint_dir else Path.cwd() / "checkpoints"
+        )
 
     @classmethod
     def from_yaml(cls, cfg_path: str, **dynamic_kwargs):
@@ -184,9 +190,11 @@ class Solver:
             if val_accuracy > best_val_accuracy:
                 best_val_accuracy = val_accuracy
                 self.best_model = copy.deepcopy(self.model)
+                self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
                 torch.save(
                     self.model.state_dict(),
-                    f"{Path(__file__).parent}/models/checkpoints/{self.model.__class__.__name__}_best_model.pth",
+                    self.checkpoint_dir
+                    / f"{self.model.__class__.__name__}_best_model.pth",
                 )
 
             self.train_accuracy_history.append(train_accuracy)

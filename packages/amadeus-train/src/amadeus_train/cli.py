@@ -139,7 +139,7 @@ def main() -> None:
         ytr_e, yva_e = encoder.transform(ytr), encoder.transform(yva)
         print(f"Encoded {num_classes} chord classes.")
 
-        model = ChromaTransformerModel(
+        model: torch.nn.Module = ChromaTransformerModel(
             input_dim=X.shape[1],
             seq_length=args.seq_length,
             num_classes=num_classes,

@@ -28,6 +28,7 @@ dev = [
     "pytest-mock>=3.12",
     "hypothesis>=6.100",
     "httpx>=0.27",
+    "pre-commit>=3.7",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -48,25 +49,6 @@ ignore = ["E501", "B008"]
 # Group the workspace packages together as first-party imports.
 known-first-party = ["amadeus_core", "amadeus_api", "amadeus_train"]
 
-[tool.ruff.lint.per-file-ignores]
-# Relocated research modules (datasets/solver/griddy/datagen): kept working as-is, not
-# yet modernized. Silence pre-existing style nits (unused locals, bare excepts,
-# zip-strict) so they don't block the product-code lint gate.
-"packages/amadeus-train/src/amadeus_train/datasets.py" = ["F841", "B905", "E722"]
-"packages/amadeus-train/src/amadeus_train/solver.py" = ["F841", "B905", "E722"]
-"packages/amadeus-train/src/amadeus_train/youtube_download.py" = ["UP022", "B905", "E722"]
-"packages/amadeus-train/src/amadeus_train/griddy/**" = ["F841", "B905", "E722"]
-"packages/amadeus-train/src/amadeus_train/datagen/**" = ["F841", "B905", "E722"]
-# Relocated research model zoo (CNN/RNN/Fourier/... moved from the old models/ dir).
-"packages/amadeus-core/src/amadeus_core/models/CNN.py" = ["F841", "B905", "E722"]
-"packages/amadeus-core/src/amadeus_core/models/RNN.py" = ["F841", "B905", "E722"]
-"packages/amadeus-core/src/amadeus_core/models/CRNN.py" = ["F841", "B905", "E722"]
-"packages/amadeus-core/src/amadeus_core/models/FourierCNN.py" = ["F841", "B905", "E722"]
-"packages/amadeus-core/src/amadeus_core/models/FourierS2S.py" = ["F841", "B905", "E722"]
-"packages/amadeus-core/src/amadeus_core/models/StridedFourier.py" = ["F841", "B905", "E722"]
-"packages/amadeus-core/src/amadeus_core/models/AudioDataset.py" = ["F841", "B905", "E722"]
-"packages/amadeus-core/src/amadeus_core/models/mlp_chord_classifier.py" = ["F841", "B905", "E722"]
-
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
@@ -74,7 +56,30 @@ no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = false
 check_untyped_defs = false
+explicit_package_bases = true
 exclude = ["archive/", "notebooks/", "build/", "dist/"]
+
+# Product code (core + api) is held to a stricter bar than the research packages.
+[[tool.mypy.overrides]]
+module = ["amadeus_core.*", "amadeus_api.*"]
+check_untyped_defs = true
+disallow_incomplete_defs = true
+
+# The relocated research model zoo lives under amadeus_core.models but is not product
+# code — keep it at the lenient bar (more specific override wins).
+[[tool.mypy.overrides]]
+module = [
+    "amadeus_core.models.CNN",
+    "amadeus_core.models.RNN",
+    "amadeus_core.models.CRNN",
+    "amadeus_core.models.FourierCNN",
+    "amadeus_core.models.FourierS2S",
+    "amadeus_core.models.StridedFourier",
+    "amadeus_core.models.AudioDataset",
+    "amadeus_core.models.mlp_chord_classifier",
+]
+check_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 addopts = "-v --strict-markers --tb=short"

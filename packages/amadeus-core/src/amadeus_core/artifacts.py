@@ -85,7 +85,9 @@ def load_bundle(
                 stage="load_artifacts",
             )
     # All three are present and non-None past this point.
-    assert model_path is not None and scaler_path is not None and encoder_path is not None
+    assert (
+        model_path is not None and scaler_path is not None and encoder_path is not None
+    )
 
     try:
         with open(scaler_path, "rb") as fin:

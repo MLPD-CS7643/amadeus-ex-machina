@@ -65,7 +65,6 @@ class Reverb:
             ir = convolve(ir, diff_kernel, mode="same")
 
         # Apply damping (frequency-dependent decay)
-        nyquist = self.sample_rate * 0.5
         cutoff = 0.05 + (1.0 - damping) * 0.4
         b, a = butter(2, cutoff, "low")
         ir = lfilter(b, a, ir)
