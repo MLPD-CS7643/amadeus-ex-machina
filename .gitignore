@@ -3,16 +3,25 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Environments
+# Environments / uv
 .env
-.venv
+.venv/
 env/
 venv*/
 ENV/
 env.bak/
 venv.bak/
+# Note: uv.lock IS committed (reproducible installs); do not ignore it.
 
-# Misc
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Editors / OS
 .idea
 .ipynb_checkpoints
 .vscode
@@ -38,6 +47,10 @@ wheels/
 *.egg
 MANIFEST
 
+# Frontend
+node_modules/
+frontend/dist/
+
 # Audio Files
 *.mid
 *.wav
@@ -46,25 +59,21 @@ MANIFEST
 # Soundfonts
 *.sf2
 
-# Metadata
-datagen/fx_out/*/*.txt
-
-# Models
+# Models / weights (artifacts/model_config.json IS tracked; binaries are not)
 *.pth
+*.pt
+*.pkl
 
-# Optuna Studies
+# Optuna studies
 *.db
 
-# Don't upload massive data files to git
+# Datasets / generated data (kept out of git)
 data/raw/
 data/processed/
-data/generation
-datagen/chords/
-datagen/sf2/
+data/generation/
 
-texturebias_experiment/timbral_bias_datasets/*
+# Large/derived assets
 *.zip
-*.pkl
 *.csv
 
 # Secrets
