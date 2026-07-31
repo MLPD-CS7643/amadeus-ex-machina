@@ -37,7 +37,12 @@ was trapped inside the Flask backend and the training script reached into it via
 
 ### `amadeus-core` (`packages/amadeus-core/src/amadeus_core/`)
 - `features/chroma.py` — `chroma24_from_audio` / `extract_chroma24`: audio → 24-dim
-  (bass+treble) chroma. **Single source of truth** for the feature representation.
+  (bass+treble) chroma. **Single source of truth** for the feature representation. Has a
+  `backend` selector: `"librosa"` (default; band-limited CQT approximation) or `"nnls"`.
+- `features/nnls.py` — `nnls_bothchroma`: **true** McGill NNLS `bothchroma` via the Queen
+  Mary NNLS Chroma Vamp plugin (parity-by-construction with the Billboard training
+  features). Optional native backend; set it up with `just nnls-setup`. `nnls_backend_available()`
+  lets the API fall back to librosa when the plugin isn't installed.
 - `models/` — the model zoo. Serving models (`chroma_transformer.py` →
   `ChromaTransformerModel`, `chroma_mlp.py` → `ChromaMLP`, `crnn_legacy.py` →
   `CRNNChordModel`) plus `registry.py` (`build_model`, `SEQUENCE_MODELS`). Research nets
@@ -84,6 +89,9 @@ core `InferenceEngine` onto `app.state`, with CORS + a rate-limit middleware and
   - `just api` — run the FastAPI dev server (uvicorn on :8000).
   - `just train *ARGS` — run the GuitarSet trainer (e.g. `just train --max-tracks 4 --epochs 1`).
   - `just fe-dev` / `fe-build` / `fe-test` — frontend (wraps npm in `frontend/`).
+  - `just nnls-setup` — one-time (macOS): build + install the NNLS Chroma Vamp plugin and
+    the `vamp` Python host, so the API can serve the Billboard model on true bothchroma.
+    Not part of `uv sync` (native, not pip-installable); see `scripts/setup_nnls_backend.sh`.
 - **ruff** (lint + format, replaces black/flake8) and **mypy** are configured once in the
   root `pyproject.toml`. Relocated research modules have targeted `per-file-ignores` (they
   work but aren't modernized). The frontend (`frontend/`) keeps its Vite/Vitest tooling and
@@ -92,13 +100,18 @@ core `InferenceEngine` onto `app.state`, with CORS + a rate-limit middleware and
 ## Core concepts
 
 - **Chord labels** are Billboard notation `root:class` (e.g. `C:maj7`); `N` = no chord.
-  The deployed model uses MIREX **maj/min** (24 classes).
-- **Features**: 24-dim chroma (12 bass + 12 treble). The same `chroma24_from_audio` is
-  used at train and inference time, so there is **no train/serve feature mismatch**.
-- **The deployed model** is a `ChromaTransformerModel` trained on GuitarSet, in
-  `artifacts/guitarset_chroma/`. The binaries (`model.pt`, `*.pkl`) are gitignored;
-  `model_config.json` is tracked. Inference slides a window over chroma frames, predicts
-  per window, votes per frame, smooths, and merges to `.lab`.
+- **Features**: 24-dim chroma (12 bass + 12 treble). The *same* extractor is used at train
+  and inference time, so there is **no train/serve feature mismatch** — the crux is picking
+  the matching backend for the served model (librosa CQT vs. true NNLS bothchroma).
+- **The deployed (primary) model** is a `ChromaTransformerModel` trained on **McGill-Billboard**
+  with a **sevenths** vocab (119 classes), in `artifacts/billboard_sevenths/`. It serves on
+  **true NNLS `bothchroma`** (`feature_backend: "nnls"` in its config), so it needs the NNLS
+  Vamp plugin — run `just nnls-setup` once (macOS). If that backend isn't installed, the API
+  **falls back at startup** to the librosa **GuitarSet** maj/min model in
+  `artifacts/guitarset_chroma/` (24 classes) so the app still works out of the box.
+- The binaries (`model.pt`, `*.pkl`) are gitignored; `model_config.json` is tracked (and now
+  carries `feature_backend`, so a bundle self-selects its extractor). Inference slides a
+  window over chroma frames, predicts per window, votes per frame, smooths, merges to `.lab`.
 
 ## How to run things
 
