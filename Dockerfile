@@ -39,55 +39,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # --- Build + install the nnls-chroma Vamp plugin (Linux .so) ------------------------
 # Ship only the NNLS Chroma feature plugin (bothchroma); Chordino's chord-dictionary path
-# pulls in boost, so strip it -- identical to scripts/setup_nnls_backend.sh on macOS. No
-# BLAS/LAPACK needed (nnls.c is self-contained; the Vamp SDK supplies the FFT).
+# pulls in boost, so strip it via the shared scripts/patch_nnls_chroma.py (also used by
+# scripts/setup_nnls_backend.sh on macOS). No BLAS/LAPACK needed (nnls.c is self-contained;
+# the Vamp SDK supplies the FFT).
+COPY scripts/patch_nnls_chroma.py /tmp/patch_nnls_chroma.py
 RUN <<'BUILD'
 set -eux
 git clone --depth 1 https://github.com/c4dm/nnls-chroma.git /tmp/nnls
 cd /tmp/nnls
-python3 - <<'PY'
-p = "chromamethods.cpp"
-s = open(p).read()
-for inc in (
-    "#include <boost/tokenizer.hpp>\n",
-    "#include <boost/iostreams/device/file.hpp>\n",
-    "#include <boost/iostreams/stream.hpp>\n",
-    "#include <boost/lexical_cast.hpp>\n",
-):
-    s = s.replace(inc, "")
-s = s.replace("using namespace boost;\n", "")
-lines = s.split("\n")
-i = next(k for k, l in enumerate(lines) if l.startswith("vector<string> chordDictionary("))
-depth, started, end = 0, False, None
-for k in range(i, len(lines)):
-    depth += lines[k].count("{") - lines[k].count("}")
-    started = started or "{" in lines[k]
-    if started and depth == 0:
-        end = k
-        break
-assert end is not None
-sig = lines[i].split("{")[0].strip()
-lines[i:end + 1] = [
-    sig + " {",
-    "    (void)mchorddict; (void)m_chordnotes; (void)boostN; (void)harte_syntax;",
-    "    return std::vector<std::string>();",
-    "}",
-]
-open(p, "w").write("\n".join(lines))
-
-p = "plugins.cpp"
-s = open(p).read()
-s = s.replace('#include "Chordino.h"\n', "")
-s = s.replace("static Vamp::PluginAdapter<Chordino> chordinoAdapter;\n", "")
-s = s.replace(
-    "    case  0: return chromaAdapter.getDescriptor();\n"
-    "    case  1: return chordinoAdapter.getDescriptor();\n"
-    "    case  2: return tuningAdapter.getDescriptor();\n",
-    "    case  0: return chromaAdapter.getDescriptor();\n"
-    "    case  1: return tuningAdapter.getDescriptor();\n",
-)
-open(p, "w").write(s)
-PY
+python3 /tmp/patch_nnls_chroma.py
 for src in chromamethods NNLSBase NNLSChroma Tuning plugins viterbi; do
     g++ -O3 -ffast-math -fPIC -c "$src.cpp" -o "$src.o"
 done

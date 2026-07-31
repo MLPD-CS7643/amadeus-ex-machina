@@ -18,7 +18,9 @@ frontend
 data
 notebooks
 archive
-scripts
+# scripts/ is macOS setup; only the shared plugin patch is needed in the image build.
+scripts/*
+!scripts/patch_nnls_chroma.py
 docs
 # Throwaway proof-of-concept bundle, not served.
 artifacts/guitarset_sevenths

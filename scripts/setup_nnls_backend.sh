@@ -51,58 +51,9 @@ echo "  cloning nnls-chroma source into $BUILD_DIR ..."
 git clone --depth 1 https://github.com/c4dm/nnls-chroma.git "$BUILD_DIR/nnls-chroma" >/dev/null 2>&1
 cd "$BUILD_DIR/nnls-chroma"
 
-# We only need the NNLS Chroma feature plugin (bothchroma). Chordino's chord-dictionary
-# parser pulls in boost; drop Chordino and neutralize that parser so the build has no boost
-# dependency. This does not affect bothchroma output in any way.
-python3 - <<'PY'
-p = "chromamethods.cpp"
-s = open(p).read()
-for inc in (
-    "#include <boost/tokenizer.hpp>\n",
-    "#include <boost/iostreams/device/file.hpp>\n",
-    "#include <boost/iostreams/stream.hpp>\n",
-    "#include <boost/lexical_cast.hpp>\n",
-):
-    s = s.replace(inc, "")
-s = s.replace("using namespace boost;\n", "")
-lines = s.split("\n")
-start = next(i for i, l in enumerate(lines) if l.startswith("vector<string> chordDictionary("))
-depth = 0
-started = False
-end = None
-for i in range(start, len(lines)):
-    depth += lines[i].count("{") - lines[i].count("}")
-    if "{" in lines[i]:
-        started = True
-    if started and depth == 0:
-        end = i
-        break
-assert end is not None
-sig = lines[start].split("{")[0].strip()
-lines[start:end + 1] = [
-    sig + " {",
-    "    // Chordino chord-dictionary parsing removed: this build ships only the",
-    "    // NNLS-Chroma feature plugin (bothchroma), so this is never called.",
-    "    (void)mchorddict; (void)m_chordnotes; (void)boostN; (void)harte_syntax;",
-    "    return std::vector<std::string>();",
-    "}",
-]
-open(p, "w").write("\n".join(lines))
-
-p = "plugins.cpp"
-s = open(p).read()
-s = s.replace('#include "Chordino.h"\n', "")
-s = s.replace("static Vamp::PluginAdapter<Chordino> chordinoAdapter;\n", "")
-s = s.replace(
-    "    case  0: return chromaAdapter.getDescriptor();\n"
-    "    case  1: return chordinoAdapter.getDescriptor();\n"
-    "    case  2: return tuningAdapter.getDescriptor();\n",
-    "    case  0: return chromaAdapter.getDescriptor();\n"
-    "    case  1: return tuningAdapter.getDescriptor();\n",
-)
-open(p, "w").write(s)
-print("  patched out boost/Chordino")
-PY
+# Strip the boost/Chordino path (shared with the Dockerfile build) so the plugin needs no
+# boost and bothchroma output is unchanged. See scripts/patch_nnls_chroma.py.
+python3 "$REPO_ROOT/scripts/patch_nnls_chroma.py"
 
 echo "  compiling..."
 for src in chromamethods NNLSBase NNLSChroma Tuning plugins viterbi; do
