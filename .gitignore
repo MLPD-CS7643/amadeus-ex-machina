@@ -64,6 +64,9 @@ frontend/dist/
 *.pt
 *.pkl
 
+# Throwaway proof-of-concept bundle (near-random val accuracy; never served)
+artifacts/guitarset_sevenths/
+
 # Optuna studies
 *.db
 
