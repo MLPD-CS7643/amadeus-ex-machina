@@ -1,0 +1,34 @@
+# Keep the build context small and the image clean. The backend image needs only
+# packages/ and the two served artifact bundles (COPYed explicitly in the Dockerfile).
+
+.git
+.gitignore
+.venv
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+
+# Frontend is deployed separately (static SPA) -- not in the backend image.
+frontend
+
+# Heavy / irrelevant to serving.
+# ~1GB of Billboard features/audio -- never in the image.
+data
+notebooks
+archive
+# scripts/ is macOS setup; only the shared plugin patch is needed in the image build.
+scripts/*
+!scripts/patch_nnls_chroma.py
+docs
+# Throwaway proof-of-concept bundle, not served.
+artifacts/guitarset_sevenths
+artifacts/**/*cache*
+
+# Local tooling / editor cruft.
+*.log
+.DS_Store
+.idea
+.vscode
+uv.lock
