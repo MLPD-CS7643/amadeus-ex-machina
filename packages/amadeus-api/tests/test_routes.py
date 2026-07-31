@@ -124,6 +124,49 @@ class TestResultsAndDownload:
         resp = client.get("/api/download/nope")
         assert resp.status_code == 404
 
+    def test_download_tab_format(self, client, app):
+        job_id = _complete_job(app, filename="My_Song.wav")
+        resp = client.get(f"/api/download/{job_id}?format=tab")
+        assert resp.status_code == 200
+        assert "My_Song_chords.txt" in resp.headers["content-disposition"]
+        body = resp.text
+        assert "e|" in body  # six-line tab rendered
+        assert "Am" in body  # A:min segment named
+
+    def test_tab_returns_inline_text(self, client, app):
+        job_id = _complete_job(app, filename="My_Song.wav")
+        resp = client.get(f"/api/tab/{job_id}")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/plain")
+        # Viewed inline, not forced as a download.
+        assert "content-disposition" not in resp.headers
+        body = resp.text
+        assert "e|" in body  # six-line tab rendered
+        assert "Am" in body  # A:min segment named
+
+    def test_tab_not_ready(self, client, app):
+        job_id = app.state.job_manager.create_job("/tmp/up.wav", "song.wav")  # queued
+        resp = client.get(f"/api/tab/{job_id}")
+        assert resp.status_code == 404
+
+    def test_chart_returns_structured_json(self, client, app):
+        job_id = _complete_job(app, filename="My_Song.wav")
+        resp = client.get(f"/api/chart/{job_id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["jobId"] == job_id
+        assert body["title"] == "My_Song.wav"
+        names = [c["name"] for c in body["chords"]]
+        assert names == ["C", "Am"]  # C:maj, A:min
+        first = body["chords"][0]
+        assert first["frets"] == [None, 3, 2, 0, 1, 0]  # open C
+        assert first["start"] == 0.0 and first["end"] == 1.0
+
+    def test_chart_not_ready(self, client, app):
+        job_id = app.state.job_manager.create_job("/tmp/up.wav", "song.wav")  # queued
+        resp = client.get(f"/api/chart/{job_id}")
+        assert resp.status_code == 404
+
 
 @pytest.mark.security
 class TestCorsRateLimitAndSanitization:
@@ -133,15 +176,24 @@ class TestCorsRateLimitAndSanitization:
             resp.headers.get("access-control-allow-origin") == "http://localhost:3000"
         )
 
-    def test_rate_limit_returns_429(self, tmp_path):
+    def test_rate_limit_throttles_uploads(self, tmp_path):
         app = build_app(tmp_path)
         app.state.rate_limiter = RateLimiter(2)
         client = TestClient(app)
-        assert client.get("/api/status/x").status_code == 404
-        assert client.get("/api/status/x").status_code == 404
-        resp = client.get("/api/status/x")
+        files = {"file": ("t.wav", VALID_WAV, "audio/wav")}
+        assert client.post("/api/upload", files=files).status_code == 200
+        assert client.post("/api/upload", files=files).status_code == 200
+        resp = client.post("/api/upload", files=files)
         assert resp.status_code == 429
         assert resp.json()["error"]["code"] == "RATE_LIMITED"
+
+    def test_polling_reads_are_never_rate_limited(self, tmp_path):
+        # The UI polls status/results constantly; those GETs must not be throttled.
+        app = build_app(tmp_path)
+        app.state.rate_limiter = RateLimiter(2)
+        client = TestClient(app)
+        for _ in range(10):
+            assert client.get("/api/status/x").status_code == 404  # 404, never 429
 
     def test_error_message_sanitized(self, app):
         def boom(_job_id):

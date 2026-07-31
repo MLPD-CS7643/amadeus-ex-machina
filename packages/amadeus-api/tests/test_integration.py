@@ -45,6 +45,12 @@ def test_full_api_flow(tmp_path, wav_factory):
     assert download.status_code == 200
     assert b" " in download.content  # "start end label" lines
 
+    # The UI-facing guitar tab renders inline from the same real inference output.
+    tab = client.get(f"/api/tab/{job_id}")
+    assert tab.status_code == 200
+    assert "content-disposition" not in tab.headers  # inline, not a download
+    assert "e|" in tab.text and tab.text.rstrip().endswith("|")  # six-line tab
+
     # Uploaded audio should have been cleaned up.
     upload_path = tmp_path / "uploads" / job_id / "clip.wav"
     assert not upload_path.exists()

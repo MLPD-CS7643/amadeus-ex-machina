@@ -37,6 +37,26 @@ class ResultsResponse(BaseModel):
     annotations: list[Annotation]
 
 
+class ChartChord(BaseModel):
+    name: str
+    label: str
+    frets: list[int | None]  # low E -> high e; null = muted string
+    start: float
+    end: float
+    isNoChord: bool = False
+
+
+class ChartResponse(BaseModel):
+    jobId: str
+    title: str | None = None
+    key: str | None = None
+    capo: int | None = None
+    capoShapes: list[str] = []
+    duration: float
+    chords: list[ChartChord]
+    capoChords: list[ChartChord] = []
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str

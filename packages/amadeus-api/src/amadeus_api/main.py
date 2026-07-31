@@ -33,7 +33,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_HEALTH_PATH = "/api/health"
+
+def _load_engine(config: Settings) -> InferenceEngine:
+    """
+    Build the inference engine and load the primary model artifacts.
+
+    The primary (deployed) model uses the NNLS feature backend. If a bundle selects
+    ``nnls`` but that backend isn't installed on this host (``just nnls-setup`` not run),
+    fall back to the librosa-based fallback bundle so the app still serves chords instead
+    of failing every upload. If loading fails entirely, the app still boots and uploads
+    surface a clean config error.
+    """
+    from amadeus_core.features.nnls import nnls_backend_available
+
+    engine = InferenceEngine(
+        separation=getattr(config, "SEPARATION_METHOD", "none"),
+        feature_backend=getattr(config, "FEATURE_BACKEND", None),
+    )
+    try:
+        engine.load_artifacts(
+            config.MODEL_PATH,
+            config.SCALER_PATH,
+            config.ENCODER_PATH,
+            config_path=getattr(config, "MODEL_CONFIG_PATH", None),
+        )
+        fallback_model = getattr(config, "FALLBACK_MODEL_PATH", None)
+        if (
+            engine.feature_backend == "nnls"
+            and not nnls_backend_available()
+            and fallback_model
+        ):
+            logger.warning(
+                "Primary model needs the NNLS feature backend, which is not installed "
+                "(run `just nnls-setup`). Falling back to the librosa model at %s.",
+                fallback_model,
+            )
+            engine = InferenceEngine(
+                separation=getattr(config, "SEPARATION_METHOD", "none")
+            )
+            engine.load_artifacts(
+                fallback_model,
+                config.FALLBACK_SCALER_PATH,
+                config.FALLBACK_ENCODER_PATH,
+                config_path=config.FALLBACK_MODEL_CONFIG_PATH,
+            )
+    except Exception:  # noqa: BLE001 - boot anyway; uploads will report misconfig
+        logger.exception(
+            "Inference engine failed to load artifacts; uploads will fail until fixed."
+        )
+    return engine
 
 
 def create_app(config: Settings = default_settings) -> FastAPI:
@@ -63,10 +111,13 @@ def create_app(config: Settings = default_settings) -> FastAPI:
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         limiter = getattr(request.app.state, "rate_limiter", None)
+        # Only throttle the expensive operation (upload -> inference). Cheap reads the
+        # UI polls constantly (status/results/chart/tab/download) are never limited, so
+        # normal use can't trip the limiter.
         if (
             limiter is not None
+            and request.method == "POST"
             and request.url.path.startswith("/api")
-            and request.url.path != _HEALTH_PATH
         ):
             client = request.client.host if request.client else "unknown"
             if not limiter.allow(client):
@@ -88,18 +139,7 @@ def create_app(config: Settings = default_settings) -> FastAPI:
         max_concurrent=config.MAX_CONCURRENT_JOBS,
     )
     app.state.rate_limiter = RateLimiter(config.RATE_LIMIT_PER_MIN)
-    app.state.engine = InferenceEngine()
-    try:
-        app.state.engine.load_artifacts(
-            config.MODEL_PATH,
-            config.SCALER_PATH,
-            config.ENCODER_PATH,
-            config_path=getattr(config, "MODEL_CONFIG_PATH", None),
-        )
-    except Exception:  # noqa: BLE001 - boot anyway; uploads will report misconfig
-        logger.exception(
-            "Inference engine failed to load artifacts; uploads will fail until fixed."
-        )
+    app.state.engine = _load_engine(config)
     app.state.worker = JobWorker(
         job_manager=app.state.job_manager,
         engine=app.state.engine,
