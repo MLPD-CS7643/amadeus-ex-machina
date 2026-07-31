@@ -66,6 +66,12 @@ fe-build:
 fe-test:
     cd frontend && npm run test
 
+# Set up the optional NNLS feature backend (true McGill bothchroma at serve time):
+# builds + installs the nnls-chroma Vamp plugin and the vamp Python host. macOS only.
+# Needed to serve the Billboard model; the librosa backend needs none of this.
+nnls-setup:
+    bash scripts/setup_nnls_backend.sh
+
 # Install the git pre-commit hooks (run `just sync` first).
 hooks:
     uv run pre-commit install
