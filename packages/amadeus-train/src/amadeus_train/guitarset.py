@@ -15,8 +15,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from amadeus_core.chords.majmin import to_majmin, transpose_label
-from amadeus_core.features import N_CHROMA, chroma24_from_audio
+from amadeus_core.chords.majmin import to_majmin, to_sevenths, transpose_label
+from amadeus_core.features import N_CHROMA, chroma24_from_audio, separate_harmonic
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_OUT = REPO_ROOT / "artifacts" / "guitarset_chroma"
@@ -80,8 +80,14 @@ def augment_windows(win_X, win_y):
     return np.concatenate(feats).astype(np.float32), np.concatenate(labels)
 
 
-def build_dataset(dataset, hop_length, leadsheet, max_tracks, smooth_window=0):
-    """Return (X[N,24] float32, y[N] str labels, groups[N] track ids)."""
+def build_dataset(
+    dataset, hop_length, leadsheet, max_tracks, smooth_window=0, separation="none"
+):
+    """Return (X[N,24] float32, y[N] str labels, groups[N] track ids).
+
+    ``separation`` applies the same harmonic source separation as inference before
+    chroma, so a retrain on produced audio stays feature-consistent with serving.
+    """
     import mir_eval
     import mirdata.datasets.guitarset
 
@@ -95,6 +101,7 @@ def build_dataset(dataset, hop_length, leadsheet, max_tracks, smooth_window=0):
         track = dataset.track(track_id)
         try:
             audio, sr = track.audio_mix
+            audio = separate_harmonic(audio, int(sr), method=separation)
             features, timestamps = chroma24_from_audio(
                 audio, sr, hop_length=hop_length, smooth_window=smooth_window
             )
@@ -128,11 +135,16 @@ def build_dataset(dataset, hop_length, leadsheet, max_tracks, smooth_window=0):
     return X, y, groups
 
 
-def _accuracy(model, X, y, device):
+def _accuracy(model, X, y, device, batch_size=4096):
+    """Batched accuracy; forwarding the whole set at once OOMs MPS on large val sets."""
+    correct = total = 0
     with torch.no_grad():
-        xb = torch.tensor(X, dtype=torch.float32, device=device)
-        yb = torch.tensor(y, dtype=torch.long, device=device)
-        return (model(xb).argmax(1) == yb).float().mean().item()
+        for i in range(0, len(X), batch_size):
+            xb = torch.tensor(X[i : i + batch_size], dtype=torch.float32, device=device)
+            yb = torch.tensor(y[i : i + batch_size], dtype=torch.long, device=device)
+            correct += int((model(xb).argmax(1) == yb).sum().item())
+            total += len(yb)
+    return correct / total if total else 0.0
 
 
 def train(
@@ -148,10 +160,12 @@ def train(
     patience,
     weight_decay=0.0,
     label_smoothing=0.0,
+    class_weights=None,
 ):
     model.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    weight = class_weights.to(device) if class_weights is not None else None
+    criterion = nn.CrossEntropyLoss(weight=weight, label_smoothing=label_smoothing)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="max", factor=0.5, patience=2
     )
@@ -201,7 +215,7 @@ def load_or_build_features(args):
 
     tag = (
         f"mt{args.max_tracks or 'all'}_hop{args.hop_length}"
-        f"_ls{int(args.leadsheet)}_sm{args.feat_smooth}"
+        f"_ls{int(args.leadsheet)}_sm{args.feat_smooth}_sep{args.separate}"
     )
     cache_path = CACHE_DIR / f"{tag}.npz"
     if cache_path.exists() and not args.no_cache:
@@ -210,7 +224,12 @@ def load_or_build_features(args):
         print(f"Loaded cached features {X.shape} from {cache_path}")
     else:
         X, y, groups = build_dataset(
-            dataset, args.hop_length, args.leadsheet, args.max_tracks, args.feat_smooth
+            dataset,
+            args.hop_length,
+            args.leadsheet,
+            args.max_tracks,
+            args.feat_smooth,
+            separation=args.separate,
         )
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         np.savez(cache_path, X=X, y=y, groups=groups)
@@ -221,4 +240,10 @@ def load_or_build_features(args):
 def fold_majmin(y):
     folded = np.array([to_majmin(lbl) for lbl in y])
     print(f"Reduced to maj/min vocabulary: {len(set(folded))} classes")
+    return folded
+
+
+def fold_sevenths(y):
+    folded = np.array([to_sevenths(lbl) for lbl in y])
+    print(f"Reduced to sevenths vocabulary: {len(set(folded))} classes")
     return folded

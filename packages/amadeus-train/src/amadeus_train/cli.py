@@ -24,6 +24,7 @@ from amadeus_train.guitarset import (
     augment_transpositions,
     augment_windows,
     fold_majmin,
+    fold_sevenths,
     load_or_build_features,
     make_windows,
     train,
@@ -35,6 +36,13 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument(
         "--download", action="store_true", help="download GuitarSet (partial)"
     )
+    ap.add_argument(
+        "--dataset",
+        choices=["guitarset", "billboard"],
+        default="guitarset",
+        help="training corpus: 'guitarset' (solo guitar audio) or 'billboard' "
+        "(produced-music NNLS bothchroma features, no audio needed)",
+    )
     ap.add_argument("--data-home", default=str(DEFAULT_DATA_HOME))
     ap.add_argument("--out-dir", default=str(DEFAULT_OUT))
     ap.add_argument("--max-tracks", type=int, default=None)
@@ -44,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--hidden", default="256,256", help="comma-separated hidden sizes")
     ap.add_argument("--dropout", type=float, default=0.3)
     ap.add_argument("--hop-length", type=int, default=DEFAULT_HOP_LENGTH)
+    ap.add_argument(
+        "--separate",
+        choices=["none", "hpss", "demucs"],
+        default="none",
+        help="harmonic source separation before chroma (match inference for produced audio)",
+    )
     ap.add_argument(
         "--feat-smooth",
         type=int,
@@ -58,9 +72,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument(
         "--vocab",
-        choices=["full", "majmin"],
+        choices=["full", "majmin", "sevenths"],
         default="majmin",
-        help="chord vocabulary: 'majmin' folds qualities to maj/min/N (recommended)",
+        help="chord vocabulary: 'majmin' (maj/min/N), 'sevenths' (+7/maj7/min7/sus/"
+        "dim/aug, ~121 classes), or 'full' (all qualities)",
+    )
+    ap.add_argument(
+        "--class-weights",
+        action="store_true",
+        help="inverse-frequency class weights in the loss (helps rare 7th/sus classes)",
     )
     ap.add_argument(
         "--augment",
@@ -94,9 +114,19 @@ def main() -> None:
     set_seed()
     hidden_sizes = tuple(int(h) for h in args.hidden.split(",") if h)
 
-    X, y, groups = load_or_build_features(args)
+    if args.dataset == "billboard":
+        from amadeus_train.billboard import DEFAULT_DATA_HOME as BILLBOARD_HOME
+        from amadeus_train.billboard import load_or_build_billboard
+
+        if args.data_home == str(DEFAULT_DATA_HOME):  # not overridden -> billboard home
+            args.data_home = str(BILLBOARD_HOME)
+        X, y, groups = load_or_build_billboard(args)
+    else:
+        X, y, groups = load_or_build_features(args)
     if args.vocab == "majmin":
         y = fold_majmin(y)
+    elif args.vocab == "sevenths":
+        y = fold_sevenths(y)
 
     # Split by track (GroupShuffleSplit guarantees no track spans both sets).
     splitter = GroupShuffleSplit(
@@ -198,6 +228,22 @@ def main() -> None:
         train_ds, batch_size=args.batch_size, shuffle=True, drop_last=True
     )
     sample = rng.choice(len(Xtr_s), size=min(20000, len(Xtr_s)), replace=False)
+
+    class_weights = None
+    if args.class_weights:
+        counts = np.bincount(ytr_e, minlength=num_classes).astype(np.float64)
+        # sqrt-tempered inverse frequency, normalized to mean 1. Plain inverse-freq is
+        # far too aggressive on this imbalance (maj ~50% vs dim ~0.1%) and makes the
+        # model abandon the common chords; sqrt keeps rare classes weighted but stable.
+        inv = counts.sum() / (num_classes * np.maximum(counts, 1.0))
+        weights = np.sqrt(inv)
+        weights *= num_classes / weights.sum()
+        class_weights = torch.tensor(weights, dtype=torch.float32)
+        print(
+            f"Class weights over {num_classes} classes "
+            f"(range {weights.min():.2f}-{weights.max():.2f})."
+        )
+
     best_state, best_acc = train(
         model,
         train_loader,
@@ -211,15 +257,21 @@ def main() -> None:
         args.patience,
         weight_decay=args.weight_decay,
         label_smoothing=args.label_smoothing,
+        class_weights=class_weights,
     )
     print(f"Best val accuracy: {best_acc:.4f}")
 
+    # Billboard trains on precomputed McGill NNLS bothchroma: raw-mix, unsmoothed, and
+    # served via the NNLS Chroma Vamp plugin. Record that so the bundle is self-describing
+    # (--feat-smooth only affects the librosa/GuitarSet path). GuitarSet uses librosa CQT.
+    is_billboard = args.dataset == "billboard"
     config.update(
         {
             "hop_length": int(args.hop_length),
-            "feat_smooth": int(args.feat_smooth),
+            "feat_smooth": 0 if is_billboard else int(args.feat_smooth),
+            "feature_backend": "nnls" if is_billboard else "librosa",
             "val_accuracy": round(float(best_acc), 4),
-            "trained_on": "guitarset",
+            "trained_on": args.dataset,
             "vocab": args.vocab,
         }
     )
