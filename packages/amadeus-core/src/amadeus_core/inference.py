@@ -50,9 +50,22 @@ def majority_smooth(indices: np.ndarray, window: int) -> np.ndarray:
 
 
 class InferenceEngine:
-    def __init__(self, smoothing_window: int = DEFAULT_SMOOTHING_WINDOW) -> None:
+    def __init__(
+        self,
+        smoothing_window: int = DEFAULT_SMOOTHING_WINDOW,
+        separation: str = "none",
+        feature_backend: str | None = None,
+    ) -> None:
         self.bundle: ArtifactBundle | None = None
         self.smoothing_window = smoothing_window
+        # Harmonic source separation applied before chroma (none/hpss/demucs). Reduces
+        # domain mismatch on full-mix songs vs. the clean-audio training set.
+        self.separation = separation
+        # Feature backend: "librosa" (CQT approximation) | "nnls" (true McGill bothchroma
+        # via the NNLS Chroma Vamp plugin). None -> defer to the loaded bundle's config,
+        # so a bundle is self-describing; a non-None value overrides the bundle.
+        self._feature_backend_override = feature_backend
+        self.feature_backend = feature_backend or "librosa"
         self.hop_length = DEFAULT_HOP_LENGTH
         self.feat_smooth = 0
         self.is_sequence = False
@@ -80,11 +93,21 @@ class InferenceEngine:
         self.feat_smooth = bundle.feat_smooth
         self.is_sequence = bundle.is_sequence
         self.seq_length = bundle.seq_length
+        # A None override means the bundle's config decides the backend.
+        self.feature_backend = self._feature_backend_override or bundle.feature_backend
+        # NNLS bothchroma is raw-mix and unsmoothed by construction; force separation and
+        # smoothing off so a librosa-oriented default can't create a train/serve mismatch.
+        if self.feature_backend == "nnls":
+            self.separation = "none"
+            self.feat_smooth = 0
         logger.info(
-            "InferenceEngine loaded: %s, %d classes, %d features, device=%s",
+            "InferenceEngine loaded: %s, %d classes, %d features, backend=%s, "
+            "separation=%s, device=%s",
             bundle.arch,
             bundle.num_classes,
             bundle.input_features,
+            self.feature_backend,
+            self.separation,
             bundle.device,
         )
 
@@ -126,7 +149,11 @@ class InferenceEngine:
     ) -> tuple[np.ndarray, np.ndarray, float]:
         """Returns (features[n,24], timestamps[n], duration)."""
         return extract_chroma24(
-            audio_path, hop_length=self.hop_length, smooth_window=self.feat_smooth
+            audio_path,
+            hop_length=self.hop_length,
+            smooth_window=self.feat_smooth,
+            separation=self.separation,
+            backend=self.feature_backend,
         )
 
     def scale_features(self, features: np.ndarray) -> np.ndarray:

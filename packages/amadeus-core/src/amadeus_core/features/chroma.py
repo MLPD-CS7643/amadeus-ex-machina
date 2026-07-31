@@ -15,12 +15,18 @@ import librosa
 import numpy as np
 
 from amadeus_core.errors import ProcessingError
+from amadeus_core.features.separation import separate_harmonic
 
 # 24 == 12 (bass) + 12 (treble). Order must match how scaler.pkl was fit.
 N_CHROMA = 12
 FEATURE_DIM = 24
 DEFAULT_HOP_LENGTH = 2048
 BASS_FIRST = True  # concat order: True -> [bass(12) | treble(12)]
+
+# Feature extraction backends. "librosa" is the CQT approximation (default; used by the
+# GuitarSet model). "nnls" produces true McGill bothchroma via the NNLS Chroma Vamp
+# plugin (used by the Billboard model); see features/nnls.py.
+FEATURE_BACKENDS = ("librosa", "nnls")
 
 # Register boundaries (3 octaves each: C1-C4 bass, C4-C7 treble).
 _BASS_FMIN = librosa.note_to_hz("C1")
@@ -47,15 +53,19 @@ def chroma24_from_audio(
     sr: int,
     hop_length: int = DEFAULT_HOP_LENGTH,
     smooth_window: int = 0,
+    backend: str = "librosa",
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Compute approximate 24-dim Billboard-style chroma from an in-memory signal.
+    Compute 24-dim Billboard-style chroma from an in-memory signal.
 
     Args:
         y: Mono audio samples.
         sr: Sample rate.
-        hop_length: STFT/CQT hop in samples (controls frame rate).
-        smooth_window: Temporal averaging window in frames (<=1 disables).
+        hop_length: STFT/CQT hop in samples (controls frame rate). librosa backend only.
+        smooth_window: Temporal averaging window in frames (<=1 disables). librosa only.
+        backend: ``"librosa"`` (default; CQT approximation) or ``"nnls"`` (true McGill
+            bothchroma via the NNLS Chroma Vamp plugin, ignoring ``hop_length`` and
+            ``smooth_window`` since it uses the plugin's own framing and no smoothing).
 
     Returns:
         ``(features, timestamps)`` where ``features`` is ``(n_frames, 24)`` float32
@@ -66,6 +76,16 @@ def chroma24_from_audio(
     """
     if y is None or np.size(y) == 0:
         raise ProcessingError("Audio file contains no samples.", stage="audio_load")
+
+    if backend == "nnls":
+        from amadeus_core.features.nnls import nnls_bothchroma
+
+        return nnls_bothchroma(y, sr)
+    if backend != "librosa":
+        raise ProcessingError(
+            f"Unknown feature backend {backend!r}; expected one of {FEATURE_BACKENDS}.",
+            stage=_STAGE,
+        )
 
     try:
         bass = librosa.feature.chroma_cqt(
@@ -124,9 +144,21 @@ def extract_chroma24(
     audio_path: str,
     hop_length: int = DEFAULT_HOP_LENGTH,
     smooth_window: int = 0,
+    separation: str = "none",
+    backend: str = "librosa",
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """
-    Extract approximate 24-dim Billboard-style chroma from an audio file.
+    Extract 24-dim Billboard-style chroma from an audio file.
+
+    Args:
+        separation: Optional harmonic source separation applied to the waveform before
+            chroma (``none`` / ``hpss`` / ``demucs``); see
+            :mod:`amadeus_core.features.separation`. Helps produced full-mix songs by
+            pulling them toward the model's clean-harmonic training domain. Ignored for
+            the ``nnls`` backend (McGill bothchroma is computed from the raw full mix).
+        backend: ``"librosa"`` (default, CQT approximation) or ``"nnls"`` (true McGill
+            bothchroma via the NNLS Chroma Vamp plugin). The ``nnls`` path bypasses
+            separation and smoothing to match how bothchroma was produced at train time.
 
     Returns:
         ``(features, timestamps, duration)`` where ``features`` is
@@ -145,8 +177,17 @@ def extract_chroma24(
             original_error=exc,
         ) from exc
 
+    # Duration reflects the original clip, before any separation resampling roundtrip.
+    duration = float(librosa.get_duration(y=y, sr=sr))
+
+    if backend == "nnls":
+        # bothchroma is raw-mix NNLS at the plugin's own framing: no separation, no
+        # smoothing (both would reintroduce a train/serve mismatch for the Billboard model).
+        features, timestamps = chroma24_from_audio(y, int(sr), backend="nnls")
+        return features, timestamps, duration
+
+    y = separate_harmonic(y, int(sr), method=separation)
     features, timestamps = chroma24_from_audio(
         y, int(sr), hop_length=hop_length, smooth_window=smooth_window
     )
-    duration = float(librosa.get_duration(y=y, sr=sr))
     return features, timestamps, duration

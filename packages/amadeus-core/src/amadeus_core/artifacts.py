@@ -45,6 +45,7 @@ class ArtifactBundle:
     seq_length: int
     hop_length: int
     feat_smooth: int
+    feature_backend: str
 
 
 def load_bundle(
@@ -108,6 +109,7 @@ def load_bundle(
             arch = config.get("model_class", "unknown")
             hop_length = int(config.get("hop_length", DEFAULT_HOP_LENGTH))
             feat_smooth = int(config.get("feat_smooth", 0))
+            feature_backend = str(config.get("feature_backend", "librosa"))
             is_sequence = arch in SEQUENCE_MODELS
             seq_length = int(config.get("seq_length", 0))
         else:
@@ -120,6 +122,7 @@ def load_bundle(
             arch = "CRNNChordModel (legacy)"
             hop_length = DEFAULT_HOP_LENGTH
             feat_smooth = 0
+            feature_backend = "librosa"
             is_sequence = False
             seq_length = 0
 
@@ -150,6 +153,7 @@ def load_bundle(
         seq_length=seq_length,
         hop_length=hop_length,
         feat_smooth=feat_smooth,
+        feature_backend=feature_backend,
     )
 
 
