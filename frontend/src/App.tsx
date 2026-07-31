@@ -13,19 +13,29 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [jobId, setJobId] = useState<string | null>(null);
   const [results, setResults] = useState<ResultsResponse | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reset = useCallback(() => {
     setPhase("idle");
     setJobId(null);
     setResults(null);
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setError(null);
   }, []);
 
-  const handleUploaded = useCallback((id: string) => {
+  const handleUploaded = useCallback((id: string, file: File) => {
     setJobId(id);
     setResults(null);
     setError(null);
+    // Keep the uploaded audio client-side so results can play it back (synced chords).
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
     setPhase("processing");
   }, []);
 
@@ -75,7 +85,7 @@ export default function App() {
                 annotations={results.annotations}
                 duration={results.duration}
               />
-              <ResultsComponent results={results} />
+              <ResultsComponent results={results} audioUrl={audioUrl ?? undefined} />
               <div className="text-center">
                 <button
                   type="button"

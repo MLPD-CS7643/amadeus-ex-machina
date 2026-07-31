@@ -1,31 +1,45 @@
 import { useState } from "react";
 import type { ResultsResponse } from "../types";
-import { downloadAnnotations, extractErrorMessage } from "../api/client";
+import {
+  downloadAnnotations,
+  downloadTab,
+  extractErrorMessage,
+} from "../api/client";
 import { formatTime, stripExtension } from "../utils/format";
+import ChartPanel from "./ChartPanel";
 
 interface Props {
   results: ResultsResponse;
+  audioUrl?: string;
 }
 
 const PREVIEW_COUNT = 10;
 
-export default function ResultsComponent({ results }: Props) {
-  const [downloading, setDownloading] = useState(false);
+type DownloadFormat = "lab" | "tab";
+
+export default function ResultsComponent({ results, audioUrl }: Props) {
+  const [downloading, setDownloading] = useState<DownloadFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const preview = results.annotations.slice(0, PREVIEW_COUNT);
   const remaining = Math.max(0, results.annotations.length - PREVIEW_COUNT);
-  const downloadName = `${stripExtension(results.filename || "audio")}_chords.lab`;
+  const stem = stripExtension(results.filename || "audio");
+  const labName = `${stem}_chords.lab`;
+  const tabName = `${stem}_chords.txt`;
 
-  const handleDownload = async () => {
-    setDownloading(true);
+  const handleDownload = async (format: DownloadFormat) => {
+    setDownloading(format);
     setError(null);
     try {
-      await downloadAnnotations(results.jobId, downloadName);
+      if (format === "tab") {
+        await downloadTab(results.jobId, tabName);
+      } else {
+        await downloadAnnotations(results.jobId, labName);
+      }
     } catch (err) {
       setError(extractErrorMessage(err, "Download failed. Please try again."));
     } finally {
-      setDownloading(false);
+      setDownloading(null);
     }
   };
 
@@ -39,14 +53,25 @@ export default function ResultsComponent({ results }: Props) {
             {formatTime(results.duration)}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleDownload}
-          disabled={downloading}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {downloading ? "Downloading…" : "Download .lab"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => handleDownload("tab")}
+            disabled={downloading !== null}
+            title="ASCII guitar tab (chord chart)"
+            className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-indigo-700 ring-1 ring-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
+          >
+            {downloading === "tab" ? "Downloading…" : "Guitar Tab"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDownload("lab")}
+            disabled={downloading !== null}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {downloading === "lab" ? "Downloading…" : "Download .lab"}
+          </button>
+        </div>
       </div>
 
       <div>
@@ -83,6 +108,8 @@ export default function ResultsComponent({ results }: Props) {
           </p>
         )}
       </div>
+
+      <ChartPanel jobId={results.jobId} audioUrl={audioUrl} />
 
       {error && (
         <p role="alert" className="text-sm text-red-600">

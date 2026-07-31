@@ -27,6 +27,26 @@ export interface ResultsResponse {
   annotations: ChordAnnotation[];
 }
 
+export interface ChartChord {
+  name: string;
+  label: string;
+  frets: (number | null)[]; // low E -> high e; null = muted string
+  start: number;
+  end: number;
+  isNoChord: boolean;
+}
+
+export interface ChartResponse {
+  jobId: string;
+  title: string | null;
+  key: string | null;
+  capo: number | null;
+  capoShapes: string[];
+  duration: number;
+  chords: ChartChord[];
+  capoChords: ChartChord[];
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;

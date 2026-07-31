@@ -5,7 +5,7 @@ import { extractErrorMessage, uploadFile } from "../api/client";
 import { formatBytes } from "../utils/format";
 
 interface Props {
-  onUploaded: (jobId: string) => void;
+  onUploaded: (jobId: string, file: File) => void;
 }
 
 function extensionOf(name: string): string {
@@ -61,7 +61,7 @@ export default function UploadComponent({ onUploaded }: Props) {
     setProgress(0);
     try {
       const res = await uploadFile(file, { onProgress: setProgress });
-      onUploaded(res.jobId);
+      onUploaded(res.jobId, file);
     } catch (err) {
       setError(extractErrorMessage(err, "Upload failed. Please try again."));
       setUploading(false);

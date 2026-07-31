@@ -39,7 +39,9 @@ describe("UploadComponent", () => {
     expect(await screen.findByText("song.wav")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Analyze chords/i }));
 
-    await waitFor(() => expect(onUploaded).toHaveBeenCalledWith("job-123"));
+    await waitFor(() =>
+      expect(onUploaded).toHaveBeenCalledWith("job-123", expect.any(File))
+    );
     expect(client.uploadFile).toHaveBeenCalledTimes(1);
   });
 });
